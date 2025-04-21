@@ -56,137 +56,138 @@
 
 namespace emp {
 
-typedef struct { block rd_key[11]; unsigned int rounds; } AES_KEY;
+	typedef struct {
+		block rd_key[11];
+		unsigned int rounds;
+	} AES_KEY;
 
-#define EXPAND_ASSIST(v1,v2,v3,v4,shuff_const,aes_const)                    \
-    v2 = _mm_aeskeygenassist_si128(v4,aes_const);                           \
-    v3 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(v3),              \
-                                         _mm_castsi128_ps(v1), 16));        \
-    v1 = _mm_xor_si128(v1,v3);                                              \
-    v3 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(v3),              \
-                                         _mm_castsi128_ps(v1), 140));       \
-    v1 = _mm_xor_si128(v1,v3);                                              \
-    v2 = _mm_shuffle_epi32(v2,shuff_const);                                 \
-    v1 = _mm_xor_si128(v1,v2)
+#define EXPAND_ASSIST(v1, v2, v3, v4, shuff_const, aes_const)                                                          \
+	v2 = _mm_aeskeygenassist_si128(v4, aes_const);                                                                     \
+	v3 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(v3), _mm_castsi128_ps(v1), 16));                             \
+	v1 = _mm_xor_si128(v1, v3);                                                                                        \
+	v3 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(v3), _mm_castsi128_ps(v1), 140));                            \
+	v1 = _mm_xor_si128(v1, v3);                                                                                        \
+	v2 = _mm_shuffle_epi32(v2, shuff_const);                                                                           \
+	v1 = _mm_xor_si128(v1, v2)
 
-inline void
+	inline void
 #ifdef __x86_64__
-__attribute__((target("aes,sse2")))
+		__attribute__((target("aes,sse2")))
 #endif
-AES_set_encrypt_key(const block userkey, AES_KEY *key) {
-    block x0, x1, x2;
-    block *kp = key->rd_key;
-    kp[0] = x0 = userkey;
-    x2 = _mm_setzero_si128();
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 1);
-    kp[1] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 2);
-    kp[2] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 4);
-    kp[3] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 8);
-    kp[4] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 16);
-    kp[5] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 32);
-    kp[6] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 64);
-    kp[7] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 128);
-    kp[8] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 27);
-    kp[9] = x0;
-    EXPAND_ASSIST(x0, x1, x2, x0, 255, 54);
-    kp[10] = x0;
-    key->rounds = 10;
-}
+		AES_set_encrypt_key(const block userkey, AES_KEY* key) {
+		block x0, x1, x2;
+		block* kp = key->rd_key;
+		kp[0] = x0 = userkey;
+		x2 = _mm_setzero_si128();
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 1);
+		kp[1] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 2);
+		kp[2] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 4);
+		kp[3] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 8);
+		kp[4] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 16);
+		kp[5] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 32);
+		kp[6] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 64);
+		kp[7] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 128);
+		kp[8] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 27);
+		kp[9] = x0;
+		EXPAND_ASSIST(x0, x1, x2, x0, 255, 54);
+		kp[10] = x0;
+		key->rounds = 10;
+	}
 
 #ifdef __x86_64__
-__attribute__((target("aes,sse2")))
-inline void AES_ecb_encrypt_blks(block *blks, unsigned int nblks, const AES_KEY *key) {
-   for (unsigned int i = 0; i < nblks; ++i)
-      blks[i] = _mm_xor_si128(blks[i], key->rd_key[0]);
-   for (unsigned int j = 1; j < key->rounds; ++j)
-      for (unsigned int i = 0; i < nblks; ++i)
-         blks[i] = _mm_aesenc_si128(blks[i], key->rd_key[j]);
-   for (unsigned int i = 0; i < nblks; ++i)
-      blks[i] = _mm_aesenclast_si128(blks[i], key->rd_key[key->rounds]);
-}
+	__attribute__((target("aes,sse2"))) inline void AES_ecb_encrypt_blks(block* blks, unsigned int nblks,
+																		 const AES_KEY* key) {
+		for (unsigned int i = 0; i < nblks; ++i)
+			blks[i] = _mm_xor_si128(blks[i], key->rd_key[0]);
+		for (unsigned int j = 1; j < key->rounds; ++j)
+			for (unsigned int i = 0; i < nblks; ++i)
+				blks[i] = _mm_aesenc_si128(blks[i], key->rd_key[j]);
+		for (unsigned int i = 0; i < nblks; ++i)
+			blks[i] = _mm_aesenclast_si128(blks[i], key->rd_key[key->rounds]);
+	}
 #elif __aarch64__
-inline void AES_ecb_encrypt_blks(block *_blks, unsigned int nblks, const AES_KEY *key) {
-   uint8x16_t * blks = (uint8x16_t*)(_blks);
-   uint8x16_t * keys = (uint8x16_t*)(key->rd_key);
-   auto * first = blks;
-   for (unsigned int j = 0; j < key->rounds-1; ++j) {
-		uint8x16_t key_j = (uint8x16_t)keys[j];
-      blks = first;
-      for (unsigned int i = 0; i < nblks; ++i, ++blks)
-	       *blks = vaeseq_u8(*blks, key_j);
-      blks = first;
-      for (unsigned int i = 0; i < nblks; ++i, ++blks)
-	       *blks = vaesmcq_u8(*blks);
-   }
-	uint8x16_t last_key = (uint8x16_t)keys[key->rounds-1];
-	for (unsigned int i = 0; i < nblks; ++i, ++first)
-		 *first = vaeseq_u8(*first, last_key) ^ last_key;
-}
+	inline void AES_ecb_encrypt_blks(block* _blks, unsigned int nblks, const AES_KEY* key) {
+		uint8x16_t* blks = (uint8x16_t*) (_blks);
+		uint8x16_t* keys = (uint8x16_t*) (key->rd_key);
+		auto* first = blks;
+		for (unsigned int j = 0; j < key->rounds - 1; ++j) {
+			uint8x16_t key_j = (uint8x16_t) keys[j];
+			blks = first;
+			for (unsigned int i = 0; i < nblks; ++i, ++blks)
+				*blks = vaeseq_u8(*blks, key_j);
+			blks = first;
+			for (unsigned int i = 0; i < nblks; ++i, ++blks)
+				*blks = vaesmcq_u8(*blks);
+		}
+		uint8x16_t last_key = (uint8x16_t) keys[key->rounds - 1];
+		for (unsigned int i = 0; i < nblks; ++i, ++first)
+			*first = vaeseq_u8(*first, last_key) ^ last_key;
+	}
 #endif
 
 #ifdef __GNUC__
-	#ifndef __clang__
-		#pragma GCC push_options
-		#pragma GCC optimize ("unroll-loops")
-	#endif
+#ifndef __clang__
+#pragma GCC push_options
+#pragma GCC optimize("unroll-loops")
 #endif
-template<int N>
-inline void AES_ecb_encrypt_blks(block *blks, const AES_KEY *key) {
-	AES_ecb_encrypt_blks(blks, N, key);
-}
+#endif
+	template <int N>
+	inline void AES_ecb_encrypt_blks(block* blks, const AES_KEY* key) {
+		AES_ecb_encrypt_blks(blks, N, key);
+	}
 #ifdef __GNUC_
-	#ifndef __clang___
-		#pragma GCC pop_options
-	#endif
+#ifndef __clang___
+#pragma GCC pop_options
+#endif
 #endif
 
-inline void
+	inline void
 #ifdef __x86_64__
-__attribute__((target("aes,sse2")))
+		__attribute__((target("aes,sse2")))
 #endif
-AES_set_decrypt_key_fast(AES_KEY *dkey, const AES_KEY *ekey) {
-    int j = 0;
-    int i = ekey->rounds;
+		AES_set_decrypt_key_fast(AES_KEY* dkey, const AES_KEY* ekey) {
+		int j = 0;
+		int i = ekey->rounds;
 #if (OCB_KEY_LEN == 0)
-    dkey->rounds = i;
+		dkey->rounds = i;
 #endif
-    dkey->rd_key[i--] = ekey->rd_key[j++];
-    while (i)
-        dkey->rd_key[i--] = _mm_aesimc_si128(ekey->rd_key[j++]);
-    dkey->rd_key[i] = ekey->rd_key[j];
-}
+		dkey->rd_key[i--] = ekey->rd_key[j++];
+		while (i)
+			dkey->rd_key[i--] = _mm_aesimc_si128(ekey->rd_key[j++]);
+		dkey->rd_key[i] = ekey->rd_key[j];
+	}
 
-inline void
+	inline void
 #ifdef __x86_64__
-__attribute__((target("aes,sse2")))
+		__attribute__((target("aes,sse2")))
 #endif
-AES_set_decrypt_key(block userkey, AES_KEY *key) {
-    AES_KEY temp_key;
-    AES_set_encrypt_key(userkey, &temp_key);
-    AES_set_decrypt_key_fast(key, &temp_key);
-}
+		AES_set_decrypt_key(block userkey, AES_KEY* key) {
+		AES_KEY temp_key;
+		AES_set_encrypt_key(userkey, &temp_key);
+		AES_set_decrypt_key_fast(key, &temp_key);
+	}
 
-inline void
+	inline void
 #ifdef __x86_64__
-__attribute__((target("aes,sse2")))
+		__attribute__((target("aes,sse2")))
 #endif
-AES_ecb_decrypt_blks(block *blks, unsigned nblks, const AES_KEY *key) {
-    unsigned i, j, rnds = key->rounds;
-    for (i = 0; i < nblks; ++i)
-        blks[i] = _mm_xor_si128(blks[i], key->rd_key[0]);
-    for (j = 1; j < rnds; ++j)
-        for (i = 0; i < nblks; ++i)
-            blks[i] = _mm_aesdec_si128(blks[i], key->rd_key[j]);
-    for (i = 0; i < nblks; ++i)
-        blks[i] = _mm_aesdeclast_si128(blks[i], key->rd_key[j]);
-}
+		AES_ecb_decrypt_blks(block* blks, unsigned nblks, const AES_KEY* key) {
+		unsigned i, j, rnds = key->rounds;
+		for (i = 0; i < nblks; ++i)
+			blks[i] = _mm_xor_si128(blks[i], key->rd_key[0]);
+		for (j = 1; j < rnds; ++j)
+			for (i = 0; i < nblks; ++i)
+				blks[i] = _mm_aesdec_si128(blks[i], key->rd_key[j]);
+		for (i = 0; i < nblks; ++i)
+			blks[i] = _mm_aesdeclast_si128(blks[i], key->rd_key[j]);
+	}
 }
 #endif

@@ -1,14 +1,16 @@
-#include "emp-tool/emp-tool.h"
 #include <iostream>
+
+#include "emp-tool/emp-tool.h"
 using namespace std;
 using namespace emp;
 
 void printt(block a) {
-	//uint64_t i0 = _mm_extract_epi64(a, 0);
-	//uint64_t i1 = _mm_extract_epi64(a, 1);
-	//printf("%X %X\n", i0, i1);
-	unsigned char *c = (unsigned char*)(&a);
-	for(int i = 0; i < 16; ++i) printf("%x ", c[i]);
+	// uint64_t i0 = _mm_extract_epi64(a, 0);
+	// uint64_t i1 = _mm_extract_epi64(a, 1);
+	// printf("%X %X\n", i0, i1);
+	unsigned char* c = (unsigned char*) (&a);
+	for (int i = 0; i < 16; ++i)
+		printf("%x ", c[i]);
 	printf("\n");
 }
 
@@ -27,22 +29,31 @@ int main(void) {
 	mi_eva.setS(delta);
 	block ret;
 
-
 	cout << "Correctness ... ";
-	for(int ii = 0; ii < 2; ++ii) {
-		for(int jj = 0; jj < 2; ++jj) {
-			for(int i = 0; i < 8; ++i) {
+	for (int ii = 0; ii < 2; ++ii) {
+		for (int jj = 0; jj < 2; ++jj) {
+			for (int i = 0; i < 8; ++i) {
 				prg.random_block(data, 2);
-				w0 = halfgates_garble(data[0], data[0]^delta, data[1], data[1]^delta, delta, table, &mi_gen);
+				w0 = halfgates_garble(data[0], data[0] ^ delta, data[1], data[1] ^ delta, delta, table, &mi_gen);
 				w1 = w0 ^ delta;
 
-				if(ii == 1) data1[0] = data[0] ^ delta; else data1[0] = data[0];
-				if(jj == 1) data1[1] = data[1] ^ delta; else data1[1] = data[1];
+				if (ii == 1)
+					data1[0] = data[0] ^ delta;
+				else
+					data1[0] = data[0];
+				if (jj == 1)
+					data1[1] = data[1] ^ delta;
+				else
+					data1[1] = data[1];
 				ret = halfgates_eval(data1[0], data1[1], table, &mi_eva);
 
 				block ret1 = w0;
-				if(ii == 1 && jj == 1) ret1 = w1;
-				if(cmpBlock(&ret, &ret1, 1) == false) {cout << "wrong" << endl; abort();}
+				if (ii == 1 && jj == 1)
+					ret1 = w1;
+				if (cmpBlock(&ret, &ret1, 1) == false) {
+					cout << "wrong" << endl;
+					abort();
+				}
 			}
 		}
 	}
@@ -50,16 +61,16 @@ int main(void) {
 
 	cout << "Efficiency: ";
 	auto start = clock_start();
-	for(int i = 0; i < 1024*1024*2; ++i) {
+	for (int i = 0; i < 1024 * 1024 * 2; ++i) {
 		prg.random_block(data, 2);
-		w0 = halfgates_garble(data[0], data[0]^delta, data[1], data[1]^delta, delta, table, &mi_gen);
+		w0 = halfgates_garble(data[0], data[0] ^ delta, data[1], data[1] ^ delta, delta, table, &mi_gen);
 		w1 = w0 ^ delta;
 
 		data1[0] = data[0] ^ delta;
 		data1[1] = data[1] ^ delta;
 		ret = halfgates_eval(data1[0], data1[1], table, &mi_eva);
 	}
-	cout << 1024*1024*128/(time_from(start))*1e6 << " gates/second" << endl;
+	cout << 1024 * 1024 * 128 / (time_from(start)) * 1e6 << " gates/second" << endl;
 
 	return 0;
 }

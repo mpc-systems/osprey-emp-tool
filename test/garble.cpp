@@ -4,11 +4,12 @@
 using namespace std;
 using namespace emp;
 
-class AbandonIO: public IOChannel<AbandonIO> { public:
-	void send_data_internal(const void * data, int len) {
+class AbandonIO : public IOChannel<AbandonIO> {
+public:
+	void send_data_internal(const void* data, int len) {
 	}
 
-	void recv_data_internal(void  * data, int len) {
+	void recv_data_internal(void* data, int len) {
 	}
 };
 
@@ -83,7 +84,7 @@ int main(int argc, char** argv) {
 	delete netio;
 
 	cout << "Using HighSpeedNetIO\n";
-	HighSpeedNetIO* hsnetio = new HighSpeedNetIO(party == ALICE ? nullptr : "127.0.0.1", port, port+1);
+	HighSpeedNetIO* hsnetio = new HighSpeedNetIO(party == ALICE ? nullptr : "127.0.0.1", port, port + 1);
 	test<HighSpeedNetIO>(hsnetio);
 	delete hsnetio;
 }
