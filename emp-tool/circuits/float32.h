@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include <array>
+#include <vector>
 
 #include "emp-tool/circuits/bit.h"
 #include "emp-tool/circuits/circuit_file.h"

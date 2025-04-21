@@ -155,6 +155,15 @@ inline Integer::Integer(T* input, int party) {
 	delete[] b;
 }
 
+template <std::size_t N>
+inline Integer::Integer(const std::bitset<N>& input, int party) {
+	bool* b = new bool[N];
+	for (size_t i = 0; i < N; ++i)
+		b[i] = input[i];
+	init(b, N, party);
+	delete[] b;
+}
+
 inline Integer Integer::select(const Bit& select, const Integer& a) const {
 	Integer res(*this);
 	for (size_t i = 0; i < size(); ++i)
@@ -225,6 +234,16 @@ inline void Integer::reveal(T* output, const int party) const {
 	delete[] b;
 }
 
+template <std::size_t N>
+inline std::bitset<N> Integer::reveal(int party) const {
+	std::bitset<N> bs;
+	bool b[size()];
+	revealBools(b, party);
+	for (size_t i = 0; i < min(N, size()); ++i)
+		bs.set(i, b[i]);
+	return bs;
+}
+
 inline size_t Integer::size() const {
 	return bits.size();
 }
@@ -279,9 +298,9 @@ inline Integer Integer::operator<<(size_t shamt) const {
 		for (size_t i = 0; i < size(); ++i)
 			res.bits[i] = false;
 	} else {
-		for (int i = size() - 1; i >= shamt; --i)
+		for (size_t i = size() - 1; i >= shamt; --i)
 			res.bits[i] = bits[i - shamt];
-		for (int i = shamt - 1; i >= 0; --i)
+		for (size_t i = shamt - 1; i >= 0; --i)
 			res.bits[i] = false;
 	}
 	return res;

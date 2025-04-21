@@ -4,6 +4,7 @@
 
 #include "emp-tool/execution/circuit_execution.h"
 #include "emp-tool/utils/mitccrh.h"
+#include "emp-tool/utils/prg.h"
 #include "emp-tool/utils/utils.h"
 namespace emp {
 

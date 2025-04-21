@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include <fstream>
+#include <vector>
 
 #include "emp-tool/circuits/bit.h"
 #include "emp-tool/execution/circuit_execution.h"

@@ -29,6 +29,9 @@ namespace emp {
 		template <typename T>
 		Integer(T* input, int party = PUBLIC);
 
+		template <std::size_t N>
+		Integer(const std::bitset<N>& input, int party = PUBLIC);
+
 		// Comparable
 		Bit geq(const Integer& rhs) const;
 		Bit equal(const Integer& rhs) const;
@@ -43,6 +46,8 @@ namespace emp {
 		T reveal(int party = PUBLIC) const;
 		template <typename T>
 		void reveal(T* output, const int party = PUBLIC) const;
+		template <std::size_t N>
+		std::bitset<N> reveal(int party = PUBLIC) const;
 
 		Integer abs() const;
 		Integer& resize(size_t length, bool signed_extend = true);
