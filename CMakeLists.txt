@@ -18,19 +18,10 @@ ADD_CUSTOM_COMMAND(
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Compiling aes_128 circuit file to binary")
 
-set(sources emp-tool/emp-tool.cpp)
-
 set(CMAKE_FOLDER ./)
 include(${CMAKE_FOLDER}/cmake/emp-base.cmake)
-
-find_package(OpenSSL REQUIRED)
-include_directories(${OPENSSL_INCLUDE_DIR})
-
-
-add_library(${NAME} SHARED ${sources})
 
 install(DIRECTORY emp-tool DESTINATION include/)
 install(DIRECTORY emp-ot DESTINATION include/)
 install(DIRECTORY emp-sh2pc DESTINATION include/)
 install(DIRECTORY cmake/ DESTINATION cmake/)
-install(TARGETS ${NAME} DESTINATION lib)
