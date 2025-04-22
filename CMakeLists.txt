@@ -11,3 +11,5 @@ target_compile_features(emp_utils PRIVATE cxx_std_20)
 add_executable(example_input example_input.cpp)
 target_compile_options(example_input PRIVATE -Wall)
 target_compile_features(example_input PRIVATE cxx_std_20)
+
+install(TARGETS emp_utils example_input RUNTIME DESTINATION .)
