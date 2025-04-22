@@ -4,6 +4,7 @@ Testing/
 *CTestTestfile.cmake
 .exrc
 build/
+install/
 CMakeCache.txt
 CMakeFiles/
 Makefile
@@ -39,3 +40,10 @@ install_manifest.txt
 *.exe
 *.out
 *.app
+
+*.input
+*.output
+*.expected
+
+emp_utils
+example_input
