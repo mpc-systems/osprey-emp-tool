@@ -2,26 +2,12 @@ cmake_minimum_required (VERSION 2.8.12)
 project (emptool)
 set(NAME "emp-tool")
 
-ADD_CUSTOM_COMMAND(
-  OUTPUT ${CMAKE_SOURCE_DIR}/emp-tool/circuits/files/bristol_fashion/Keccak_f.txt.cpp
-  COMMAND xxd -i emp-tool/circuits/files/bristol_fashion/Keccak_f.txt emp-tool/circuits/files/bristol_fashion/Keccak_f.txt.hex
-  COMMAND echo "\\#include \\\"emp-tool/circuits/sha3_256.h\\\"" > emp-tool/circuits/files/bristol_fashion/Keccak_f.txt.cpp
-  COMMAND cat emp-tool/circuits/files/bristol_fashion/Keccak_f.txt.hex >> emp-tool/circuits/files/bristol_fashion/Keccak_f.txt.cpp
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  COMMENT "Compiling Keccak circuit file to binary")
+add_executable(emp_utils emp_utils.cpp)
+target_include_directories(emp_utils PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(emp_utils PRIVATE aio ssl crypto gmp)
+target_compile_options(emp_utils PRIVATE -pthread -march=native -maes -mrdseed -Wall -funroll-loops -Wno-ignored-attributes -Wno-unused-result -Wno-deprecated-declarations)
+target_compile_features(emp_utils PRIVATE cxx_std_20)
 
-ADD_CUSTOM_COMMAND(
-  OUTPUT ${CMAKE_SOURCE_DIR}/emp-tool/circuits/files/bristol_fashion/aes_128.txt.cpp
-  COMMAND xxd -i emp-tool/circuits/files/bristol_fashion/aes_128.txt emp-tool/circuits/files/bristol_fashion/aes_128.txt.hex
-  COMMAND echo "\\#include \\\"emp-tool/circuits/aes_128_ctr.h\\\"" > emp-tool/circuits/files/bristol_fashion/aes_128.txt.cpp
-  COMMAND cat emp-tool/circuits/files/bristol_fashion/aes_128.txt.hex >> emp-tool/circuits/files/bristol_fashion/aes_128.txt.cpp
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  COMMENT "Compiling aes_128 circuit file to binary")
-
-set(CMAKE_FOLDER ./)
-include(${CMAKE_FOLDER}/cmake/emp-base.cmake)
-
-install(DIRECTORY emp-tool DESTINATION include/)
-install(DIRECTORY emp-ot DESTINATION include/)
-install(DIRECTORY emp-sh2pc DESTINATION include/)
-install(DIRECTORY cmake/ DESTINATION cmake/)
+add_executable(example_input example_input.cpp)
+target_compile_options(example_input PRIVATE -Wall)
+target_compile_features(example_input PRIVATE cxx_std_20)
