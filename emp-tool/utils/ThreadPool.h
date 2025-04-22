@@ -58,6 +58,7 @@ private:
 int inline ThreadPool::size() const {
 	return workers.size();
 }
+
 // the constructor just launches some amount of workers
 inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
 	for (size_t i = 0; i < threads; ++i)

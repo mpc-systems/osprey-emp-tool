@@ -14,67 +14,6 @@
 using std::min;
 using std::vector;
 namespace emp {
-	class Integer : public Swappable<Integer>, public Comparable<Integer> {
-	public:
-		vector<Bit> bits;
-		Integer() {
-		}
-		Integer(const vector<Bit>& bits) : bits(bits) {
-		}
-		Integer(int length, int64_t input, int party = PUBLIC);
-
-		template <typename T>
-		Integer(int length, T* input, int party = PUBLIC);
-
-		template <typename T>
-		Integer(T* input, int party = PUBLIC);
-
-		template <std::size_t N>
-		Integer(const std::bitset<N>& input, int party = PUBLIC);
-
-		// Comparable
-		Bit geq(const Integer& rhs) const;
-		Bit equal(const Integer& rhs) const;
-
-		// Swappable
-		Integer select(const Bit& sel, const Integer& rhs) const;
-		Integer operator^(const Integer& rhs) const;
-		Integer operator^=(const Integer& rhs);
-
-		size_t size() const;
-		template <typename T>
-		T reveal(int party = PUBLIC) const;
-		template <typename T>
-		void reveal(T* output, const int party = PUBLIC) const;
-		template <std::size_t N>
-		std::bitset<N> reveal(int party = PUBLIC) const;
-
-		Integer abs() const;
-		Integer& resize(size_t length, bool signed_extend = true);
-		Integer modExp(Integer p, Integer q);
-		Integer leading_zeros() const;
-		Integer hamming_weight() const;
-
-		Integer operator<<(size_t shamt) const;
-		Integer operator>>(size_t shamt) const;
-		Integer operator<<(const Integer& shamt) const;
-		Integer operator>>(const Integer& shamt) const;
-
-		Integer operator+(const Integer& rhs) const;
-		Integer operator-(const Integer& rhs) const;
-		Integer operator-() const;
-		Integer operator*(const Integer& rhs) const;
-		Integer operator/(const Integer& rhs) const;
-		Integer operator%(const Integer& rhs) const;
-		Integer operator&(const Integer& rhs) const;
-		Integer operator|(const Integer& rhs) const;
-
-		Bit& operator[](size_t index);
-		const Bit& operator[](size_t index) const;
-
-		void init(bool* b, int len, int party);
-		void revealBools(bool* bools, int party = PUBLIC) const;
-	};
 
 	// https://github.com/samee/obliv-c/blob/obliv-c/src/ext/oblivc/obliv_bits.c#L1487
 	inline void add_full(Bit* dest, Bit* carryOut, const Bit* op1, const Bit* op2, const Bit* carryIn, int size) {
@@ -105,6 +44,7 @@ namespace emp {
 		else
 			dest[i] = carry ^ op2[i] ^ op1[i];
 	}
+
 	inline void sub_full(Bit* dest, Bit* borrowOut, const Bit* op1, const Bit* op2, const Bit* borrowIn, int size) {
 		Bit borrow, bxc, bxa, t;
 		int skipLast;
@@ -133,6 +73,7 @@ namespace emp {
 		} else
 			dest[i] = op1[i] ^ op2[i] ^ borrow;
 	}
+
 	inline void mul_full(Bit* dest, const Bit* op1, const Bit* op2, int size) {
 		Bit* sum = new Bit[size];
 		Bit* temp = new Bit[size];
@@ -147,7 +88,7 @@ namespace emp {
 		delete[] sum;
 		delete[] temp;
 	}
-	
+
 	inline void ifThenElse(Bit* dest, const Bit* tsrc, const Bit* fsrc, int size, Bit cond) {
 		Bit x, a;
 		int i = 0;
@@ -158,6 +99,7 @@ namespace emp {
 			++i;
 		}
 	}
+
 	inline void condNeg(Bit cond, Bit* dest, const Bit* src, int size) {
 		int i;
 		Bit c = cond;
@@ -169,7 +111,7 @@ namespace emp {
 		}
 		dest[i] = cond ^ c ^ src[i];
 	}
-	
+
 	inline void div_full(Bit* vquot, Bit* vrem, const Bit* op1, const Bit* op2, int size) {
 		Bit* overflow = new Bit[size];
 		Bit* temp = new Bit[size];
@@ -196,71 +138,297 @@ namespace emp {
 		delete[] rem;
 		delete[] quot;
 	}
-	
-	inline void Integer::init(bool* b, int len, int party) {
-		bits.resize(len);
-		if (party == PUBLIC) {
-			block one = CircuitExecution::circ_exec->public_label(true);
-			block zero = CircuitExecution::circ_exec->public_label(false);
-			for (int i = 0; i < len; ++i)
-				bits[i] = b[i] ? one : zero;
-		} else {
-			ProtocolExecution::prot_exec->feed((block*) bits.data(), party, b, len);
+
+	class Integer : public Swappable<Integer>, public Comparable<Integer> {
+	public:
+		vector<Bit> bits;
+
+		Integer() {
 		}
-	}
-	
-	inline Integer::Integer(int len, int64_t input, int party) {
-		bool* b = new bool[len];
-		int_to_bool<int64_t>(b, input, len);
-		init(b, len, party);
-		delete[] b;
-	}
-	
-	template <typename T>
-	inline Integer::Integer(int len, T* input, int party) {
-		bool* b = new bool[len];
-		to_bool<T>(b, input, len);
-		init(b, len, party);
-		delete[] b;
-	}
-	
-	template <typename T>
-	inline Integer::Integer(T* input, int party) {
-		size_t len = 8 * sizeof(T);
-		bool* b = new bool[len];
-		to_bool<T>(b, input, len);
-		init(b, len, party);
-		delete[] b;
-	}
-	
-	template <std::size_t N>
-	inline Integer::Integer(const std::bitset<N>& input, int party) {
-		bool* b = new bool[N];
-		for (size_t i = 0; i < N; ++i)
-			b[i] = input[i];
-		init(b, N, party);
-		delete[] b;
-	}
-	
-	inline Integer Integer::select(const Bit& select, const Integer& a) const {
-		Integer res(*this);
-		for (size_t i = 0; i < size(); ++i)
-			res[i] = bits[i].select(select, a[i]);
-		return res;
-	}
-	
-	inline Bit& Integer::operator[](size_t index) {
-		return bits[min(index, size() - 1)];
-	}
-	
-	inline const Bit& Integer::operator[](size_t index) const {
-		return bits[min(index, size() - 1)];
-	}
-	
-	inline void Integer::revealBools(bool* bools, int party) const {
-		ProtocolExecution::prot_exec->reveal(bools, party, (block*) bits.data(), size());
-	}
-	
+
+		Integer(const vector<Bit>& bits) : bits(bits) {
+		}
+
+		Integer(int length, int64_t input, int party = PUBLIC) {
+			bool* b = new bool[length];
+			int_to_bool<int64_t>(b, input, length);
+			init(b, length, party);
+			delete[] b;
+		}
+
+		template <typename T>
+		Integer(int length, T* input, int party = PUBLIC) {
+			bool* b = new bool[length];
+			to_bool<T>(b, input, length);
+			init(b, length, party);
+			delete[] b;
+		}
+
+		template <typename T>
+		Integer(T* input, int party = PUBLIC) {
+			size_t len = 8 * sizeof(T);
+			bool* b = new bool[len];
+			to_bool<T>(b, input, len);
+			init(b, len, party);
+			delete[] b;
+		}
+
+		template <std::size_t N>
+		Integer(const std::bitset<N>& input, int party = PUBLIC) {
+			bool* b = new bool[N];
+			for (size_t i = 0; i < N; ++i)
+				b[i] = input[i];
+			init(b, N, party);
+			delete[] b;
+		}
+
+		// Comparable
+		Bit geq(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Integer thisExtend(*this), rhsExtend(rhs);
+			thisExtend.resize(size() + 1, true);
+			rhsExtend.resize(size() + 1, true);
+			Integer tmp = thisExtend - rhsExtend;
+			return !tmp[tmp.size() - 1];
+		}
+
+		Bit equal(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Bit res(true);
+			for (size_t i = 0; i < size(); ++i)
+				res = res & (bits[i] == rhs[i]);
+			return res;
+		}
+
+		// Swappable
+		Integer select(const Bit& sel, const Integer& rhs) const {
+			Integer res(*this);
+			for (size_t i = 0; i < size(); ++i)
+				res[i] = bits[i].select(sel, rhs[i]);
+			return res;
+		}
+
+		size_t size() const {
+			return bits.size();
+		}
+
+		template <typename T>
+		T reveal(int party = PUBLIC) const;
+		template <typename T>
+		void reveal(T* output, const int party = PUBLIC) const;
+		template <std::size_t N>
+		std::bitset<N> reveal(int party = PUBLIC) const {
+			std::bitset<N> bs;
+			bool b[size()];
+			revealBools(b, party);
+			for (size_t i = 0; i < min(N, size()); ++i)
+				bs.set(i, b[i]);
+			return bs;
+		}
+
+		Integer abs() const {
+			Integer res(*this);
+			for (size_t i = 0; i < size(); ++i)
+				res[i] = bits[size() - 1];
+			return ((*this) + res) ^ res;
+		}
+
+		Integer& resize(size_t length, bool signed_extend = true) {
+			Bit MSB(false, PUBLIC);
+			if (signed_extend)
+				MSB = bits[bits.size() - 1];
+			bits.resize(length, MSB);
+			return *this;
+		}
+
+		Integer modExp(Integer p, Integer q) {
+			// the value of q should be less than half of the MAX_INT
+			Integer base = *this;
+			Integer res(size(), 1);
+			for (size_t i = 0; i < p.size(); ++i) {
+				Integer tmp = (res * base) % q;
+				res = res.select(p[i], tmp);
+				base = (base * base) % q;
+			}
+			return res;
+		}
+
+		Integer leading_zeros() const {
+			Integer res = *this;
+			for (int i = size() - 2; i >= 0; --i)
+				res[i] = res[i + 1] | res[i];
+
+			for (size_t i = 0; i < res.size(); ++i)
+				res[i] = !res[i];
+			return res.hamming_weight();
+		}
+		Integer hamming_weight() const {
+			vector<Integer> vec;
+			for (size_t i = 0; i < size(); i++) {
+				Integer tmp(2, 0, PUBLIC);
+				tmp[0] = bits[i];
+				vec.push_back(tmp);
+			}
+
+			while (vec.size() > 1) {
+				size_t j = 0;
+				for (size_t i = 0; i < vec.size() - 1; i += 2) {
+					vec[j++] = vec[i] + vec[i + 1];
+				}
+				if (vec.size() % 2 == 1) {
+					vec[j++] = vec[vec.size() - 1];
+				}
+				for (size_t i = 0; i < j; ++i)
+					vec[i].resize(vec[i].size() + 1, false);
+				size_t vec_size = vec.size();
+				for (size_t i = j; i < vec_size; ++i)
+					vec.pop_back();
+			}
+			return vec[0];
+		}
+
+		// Logical operations
+		inline Integer operator^(const Integer& rhs) const {
+			Integer res(*this);
+			for (size_t i = 0; i < size(); ++i)
+				res.bits[i] = res.bits[i] ^ rhs.bits[i];
+			return res;
+		}
+
+		inline Integer operator^=(const Integer& rhs) {
+			for (size_t i = 0; i < size(); ++i)
+				this->bits[i] ^= rhs.bits[i];
+			return (*this);
+		}
+
+		inline Integer operator|(const Integer& rhs) const {
+			Integer res(*this);
+			for (size_t i = 0; i < size(); ++i)
+				res.bits[i] = res.bits[i] | rhs.bits[i];
+			return res;
+		}
+
+		inline Integer operator&(const Integer& rhs) const {
+			Integer res(*this);
+			for (size_t i = 0; i < size(); ++i)
+				res.bits[i] = res.bits[i] & rhs.bits[i];
+			return res;
+		}
+
+		inline Integer operator<<(size_t shamt) const {
+			Integer res(*this);
+			if (shamt > size()) {
+				for (size_t i = 0; i < size(); ++i)
+					res.bits[i] = false;
+			} else {
+				for (size_t i = size() - 1; i >= shamt; --i)
+					res.bits[i] = bits[i - shamt];
+				for (size_t i = shamt - 1; i >= 0; --i)
+					res.bits[i] = false;
+			}
+			return res;
+		}
+
+		inline Integer operator>>(size_t shamt) const {
+			Integer res(*this);
+			if (shamt > size()) {
+				for (size_t i = 0; i < size(); ++i)
+					res.bits[i] = false;
+			} else {
+				for (size_t i = shamt; i < size(); ++i)
+					res.bits[i - shamt] = bits[i];
+				for (size_t i = size() - shamt; i < size(); ++i)
+					res.bits[i] = false;
+			}
+			return res;
+		}
+
+		inline Integer operator<<(const Integer& shamt) const {
+			Integer res(*this);
+			for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
+				res = res.select(shamt[i], res << (1 << i));
+			return res;
+		}
+
+		inline Integer operator>>(const Integer& shamt) const {
+			Integer res(*this);
+			for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
+				res = res.select(shamt[i], res >> (1 << i));
+			return res;
+		}
+
+		inline Integer operator+(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Integer res(*this);
+			add_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
+			return res;
+		}
+
+		inline Integer operator-(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Integer res(*this);
+			sub_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
+			return res;
+		}
+
+		inline Integer operator*(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Integer res(*this);
+			mul_full(res.bits.data(), bits.data(), rhs.bits.data(), size());
+			return res;
+		}
+
+		inline Integer operator/(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Integer res(*this);
+			Integer i1 = abs();
+			Integer i2 = rhs.abs();
+			Bit sign = bits[size() - 1] ^ rhs[size() - 1];
+			div_full(res.bits.data(), nullptr, i1.bits.data(), i2.bits.data(), size());
+			condNeg(sign, res.bits.data(), res.bits.data(), size());
+			return res;
+		}
+
+		inline Integer operator%(const Integer& rhs) const {
+			assert(size() == rhs.size());
+			Integer res(*this);
+			Integer i1 = abs();
+			Integer i2 = rhs.abs();
+			Bit sign = bits[size() - 1];
+			div_full(nullptr, res.bits.data(), i1.bits.data(), i2.bits.data(), size());
+			condNeg(sign, res.bits.data(), res.bits.data(), size());
+			return res;
+		}
+
+		inline Integer operator-() const {
+			return Integer(size(), 0, PUBLIC) - (*this);
+		}
+
+		inline Bit& operator[](size_t index) {
+			return bits[min(index, size() - 1)];
+		}
+
+		const Bit& operator[](size_t index) const {
+			return bits[min(index, size() - 1)];
+		}
+
+		void init(bool* b, int len, int party) {
+			bits.resize(len);
+			if (party == PUBLIC) {
+				block one = CircuitExecution::circ_exec->public_label(true);
+				block zero = CircuitExecution::circ_exec->public_label(false);
+				for (int i = 0; i < len; ++i)
+					bits[i] = b[i] ? one : zero;
+			} else {
+				ProtocolExecution::prot_exec->feed((block*) bits.data(), party, b, len);
+			}
+		}
+
+		void revealBools(bool* bools, int party = PUBLIC) const {
+			ProtocolExecution::prot_exec->reveal(bools, party, (block*) bits.data(), size());
+		}
+	};
+
 	template <>
 	inline uint32_t Integer::reveal<uint32_t>(int party) const {
 		std::bitset<32> bs;
@@ -271,7 +439,7 @@ namespace emp {
 			bs.set(i, b[i]);
 		return bs.to_ulong();
 	}
-	
+
 	template <>
 	inline uint64_t Integer::reveal<uint64_t>(int party) const {
 		std::bitset<64> bs;
@@ -286,12 +454,12 @@ namespace emp {
 	inline int32_t Integer::reveal<int32_t>(int party) const {
 		return reveal<uint32_t>(party);
 	}
-	
+
 	template <>
 	inline int64_t Integer::reveal<int64_t>(int party) const {
 		return reveal<uint64_t>(party);
 	}
-	
+
 	template <>
 	inline string Integer::reveal<string>(int party) const {
 		bool* b = new bool[size()];
@@ -302,7 +470,7 @@ namespace emp {
 		delete[] b;
 		return res;
 	}
-	
+
 	// write the bits of this integer directly into memory wherever output points.
 	template <typename T>
 	inline void Integer::reveal(T* output, const int party) const {
@@ -310,219 +478,6 @@ namespace emp {
 		revealBools(b, party);
 		from_bool(b, output, size());
 		delete[] b;
-	}
-	
-	template <std::size_t N>
-	inline std::bitset<N> Integer::reveal(int party) const {
-		std::bitset<N> bs;
-		bool b[size()];
-		revealBools(b, party);
-		for (size_t i = 0; i < min(N, size()); ++i)
-			bs.set(i, b[i]);
-		return bs;
-	}
-	
-	inline size_t Integer::size() const {
-		return bits.size();
-	}
-	
-	// circuits
-	inline Integer Integer::abs() const {
-		Integer res(*this);
-		for (size_t i = 0; i < size(); ++i)
-			res[i] = bits[size() - 1];
-		return ((*this) + res) ^ res;
-	}
-	
-	inline Integer& Integer::resize(size_t len, bool signed_extend) {
-		Bit MSB(false, PUBLIC);
-		if (signed_extend)
-			MSB = bits[bits.size() - 1];
-		bits.resize(len, MSB);
-		return *this;
-	}
-	
-	// Logical operations
-	inline Integer Integer::operator^(const Integer& rhs) const {
-		Integer res(*this);
-		for (size_t i = 0; i < size(); ++i)
-			res.bits[i] = res.bits[i] ^ rhs.bits[i];
-		return res;
-	}
-	
-	inline Integer Integer::operator^=(const Integer& rhs) {
-		for (size_t i = 0; i < size(); ++i)
-			this->bits[i] ^= rhs.bits[i];
-		return (*this);
-	}
-	
-	inline Integer Integer::operator|(const Integer& rhs) const {
-		Integer res(*this);
-		for (size_t i = 0; i < size(); ++i)
-			res.bits[i] = res.bits[i] | rhs.bits[i];
-		return res;
-	}
-	
-	inline Integer Integer::operator&(const Integer& rhs) const {
-		Integer res(*this);
-		for (size_t i = 0; i < size(); ++i)
-			res.bits[i] = res.bits[i] & rhs.bits[i];
-		return res;
-	}
-	
-	inline Integer Integer::operator<<(size_t shamt) const {
-		Integer res(*this);
-		if (shamt > size()) {
-			for (size_t i = 0; i < size(); ++i)
-				res.bits[i] = false;
-		} else {
-			for (size_t i = size() - 1; i >= shamt; --i)
-				res.bits[i] = bits[i - shamt];
-			for (size_t i = shamt - 1; i >= 0; --i)
-				res.bits[i] = false;
-		}
-		return res;
-	}
-	
-	inline Integer Integer::operator>>(size_t shamt) const {
-		Integer res(*this);
-		if (shamt > size()) {
-			for (size_t i = 0; i < size(); ++i)
-				res.bits[i] = false;
-		} else {
-			for (size_t i = shamt; i < size(); ++i)
-				res.bits[i - shamt] = bits[i];
-			for (size_t i = size() - shamt; i < size(); ++i)
-				res.bits[i] = false;
-		}
-		return res;
-	}
-	
-	inline Integer Integer::operator<<(const Integer& shamt) const {
-		Integer res(*this);
-		for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
-			res = res.select(shamt[i], res << (1 << i));
-		return res;
-	}
-	
-	inline Integer Integer::operator>>(const Integer& shamt) const {
-		Integer res(*this);
-		for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
-			res = res.select(shamt[i], res >> (1 << i));
-		return res;
-	}
-	
-	// Comparisons
-	inline Bit Integer::geq(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Integer thisExtend(*this), rhsExtend(rhs);
-		thisExtend.resize(size() + 1, true);
-		rhsExtend.resize(size() + 1, true);
-		Integer tmp = thisExtend - rhsExtend;
-		return !tmp[tmp.size() - 1];
-	}
-	
-	inline Bit Integer::equal(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Bit res(true);
-		for (size_t i = 0; i < size(); ++i)
-			res = res & (bits[i] == rhs[i]);
-		return res;
-	}
-	
-	/* Arithmethics
-	 */
-	inline Integer Integer::operator+(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Integer res(*this);
-		add_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
-		return res;
-	}
-	
-	inline Integer Integer::operator-(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Integer res(*this);
-		sub_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
-		return res;
-	}
-	
-	inline Integer Integer::operator*(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Integer res(*this);
-		mul_full(res.bits.data(), bits.data(), rhs.bits.data(), size());
-		return res;
-	}
-	
-	inline Integer Integer::operator/(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Integer res(*this);
-		Integer i1 = abs();
-		Integer i2 = rhs.abs();
-		Bit sign = bits[size() - 1] ^ rhs[size() - 1];
-		div_full(res.bits.data(), nullptr, i1.bits.data(), i2.bits.data(), size());
-		condNeg(sign, res.bits.data(), res.bits.data(), size());
-		return res;
-	}
-	inline Integer Integer::operator%(const Integer& rhs) const {
-		assert(size() == rhs.size());
-		Integer res(*this);
-		Integer i1 = abs();
-		Integer i2 = rhs.abs();
-		Bit sign = bits[size() - 1];
-		div_full(nullptr, res.bits.data(), i1.bits.data(), i2.bits.data(), size());
-		condNeg(sign, res.bits.data(), res.bits.data(), size());
-		return res;
-	}
-	
-	inline Integer Integer::operator-() const {
-		return Integer(size(), 0, PUBLIC) - (*this);
-	}
-	
-	// Others
-	inline Integer Integer::leading_zeros() const {
-		Integer res = *this;
-		for (int i = size() - 2; i >= 0; --i)
-			res[i] = res[i + 1] | res[i];
-	
-		for (size_t i = 0; i < res.size(); ++i)
-			res[i] = !res[i];
-		return res.hamming_weight();
-	}
-	
-	inline Integer Integer::hamming_weight() const {
-		vector<Integer> vec;
-		for (size_t i = 0; i < size(); i++) {
-			Integer tmp(2, 0, PUBLIC);
-			tmp[0] = bits[i];
-			vec.push_back(tmp);
-		}
-	
-		while (vec.size() > 1) {
-			size_t j = 0;
-			for (size_t i = 0; i < vec.size() - 1; i += 2) {
-				vec[j++] = vec[i] + vec[i + 1];
-			}
-			if (vec.size() % 2 == 1) {
-				vec[j++] = vec[vec.size() - 1];
-			}
-			for (size_t i = 0; i < j; ++i)
-				vec[i].resize(vec[i].size() + 1, false);
-			size_t vec_size = vec.size();
-			for (size_t i = j; i < vec_size; ++i)
-				vec.pop_back();
-		}
-		return vec[0];
-	}
-	inline Integer Integer::modExp(Integer p, Integer q) {
-		// the value of q should be less than half of the MAX_INT
-		Integer base = *this;
-		Integer res(size(), 1);
-		for (size_t i = 0; i < p.size(); ++i) {
-			Integer tmp = (res * base) % q;
-			res = res.select(p[i], tmp);
-			base = (base * base) % q;
-		}
-		return res;
 	}
 }
 #endif // INTEGER_H__
