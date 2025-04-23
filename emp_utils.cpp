@@ -282,19 +282,24 @@ void matrix_vector_multiply(int party, std::size_t problem_size, const std::vect
 }
 
 int main(int argc, char** argv) {
-	if (argc != 8) {
+#ifdef PARTY
+	constexpr int party = PARTY;
+#else
+#error "Party must be defined at compile time"
+#endif
+
+	if (argc != 7) {
 		std::cout << "Usage: " << argv[0]
-				  << " [problem_name] [problem_size] [party] [port] [other_ip] [input_file] [output_file]" << std::endl;
+				  << " [problem_name] [problem_size] [port] [other_ip] [input_file] [output_file]" << std::endl;
 		return 1;
 	}
 
 	char* problem_name = argv[1];
 	std::size_t problem_size = std::stoull(argv[2]);
-	int party = atoi(argv[3]);
-	int port = atoi(argv[4]);
-	char* other_ip = argv[5];
-	char* input_file = argv[6];
-	char* output_file = argv[7];
+	int port = atoi(argv[3]);
+	char* other_ip = argv[4];
+	char* input_file = argv[5];
+	char* output_file = argv[6];
 
 	constexpr std::size_t width = 32;
 	constexpr std::size_t bs = 4096;
