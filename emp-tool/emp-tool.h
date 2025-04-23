@@ -6,8 +6,6 @@
 #include "emp-tool/circuits/swappable.h"
 #include "emp-tool/execution/circuit_execution.h"
 #include "emp-tool/execution/protocol_execution.h"
-#include "emp-tool/gc/halfgate_eva.h"
-#include "emp-tool/gc/halfgate_gen.h"
 #include "emp-tool/io/file_io_channel.h"
 #include "emp-tool/io/highspeed_net_io_channel.h"
 #include "emp-tool/io/io_channel.h"
