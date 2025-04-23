@@ -168,8 +168,6 @@ void merge_sorted(int party, std::size_t problem_size, const std::vector<Integer
 				  std::vector<Integer>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
-	constexpr std::size_t bytes = width / 8;
-
 	std::vector<Integer> key;
 	std::vector<Integer> value;
 
@@ -198,8 +196,6 @@ template <std::size_t width>
 void full_sort(int party, std::size_t problem_size, const std::vector<Integer>& input_data,
 			   std::vector<Integer>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
-
-	constexpr std::size_t bytes = width / 8;
 
 	std::vector<Integer> key;
 	std::vector<Integer> value;
@@ -235,8 +231,6 @@ void loop_join(int party, std::size_t problem_size, const std::vector<Integer>& 
 		return;
 	}
 
-	constexpr std::size_t bytes = width / 8;
-
 	Integer zero(width, 0, PUBLIC);
 
 	std::vector<Integer>::const_iterator table1_input_data_begin = input_data.begin();
@@ -266,8 +260,6 @@ template <std::size_t width>
 void matrix_vector_multiply(int party, std::size_t problem_size, const std::vector<Integer>& input_data,
 							std::vector<Integer>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
-
-	constexpr std::size_t bytes = width / 8;
 
 	std::vector<Integer> vector;
 	std::vector<Integer> matrix;

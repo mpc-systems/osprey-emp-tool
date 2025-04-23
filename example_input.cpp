@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 	std::string problem_name(argv[1]);
-	int input_size = std::stoi(std::string(argv[2]));
+	std::size_t input_size = std::stoull(std::string(argv[2]));
 
 	std::string option;
 	if (argc == 5) {
@@ -91,7 +91,6 @@ int main(int argc, char** argv) {
 			write_record(evaluator_file, table2_keys[i]);
 		}
 
-		std::size_t join_size = table1_keys.size() * table2_keys.size();
 		for (std::uint64_t i = 0, k = 0; i != table1_keys.size(); i++) {
 			for (std::uint64_t j = 0; j != table2_keys.size(); j++, k++) {
 				bool valid = (table1_keys[i] < table2_keys[j]);
