@@ -8,8 +8,6 @@
 #include "emp-tool/circuits/sha3_256.h"
 #include "emp-tool/circuits/swappable.h"
 #include "emp-tool/execution/circuit_execution.h"
-#include "emp-tool/execution/plain_circ.h"
-#include "emp-tool/execution/plain_prot.h"
 #include "emp-tool/execution/protocol_execution.h"
 #include "emp-tool/gc/halfgate_eva.h"
 #include "emp-tool/gc/halfgate_gen.h"
