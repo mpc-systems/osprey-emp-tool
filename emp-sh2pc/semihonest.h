@@ -5,9 +5,9 @@
 
 namespace emp {
 
-	template <typename IO>
-	inline SemiHonestParty<IO>* setup_semi_honest(IO* io, int party, int batch_size = 1024 * 16) {
-		if (party == ALICE) {
+	template <int party, typename IO>
+	inline SemiHonestParty<IO>* setup_semi_honest(IO* io, int batch_size = 1024 * 16) {
+		if constexpr (party == ALICE) {
 			HalfGateGen<IO>* t = new HalfGateGen<IO>(io);
 			CircuitExecution::circ_exec = t;
 			ProtocolExecution::prot_exec = new SemiHonestGen<IO>(io, t);

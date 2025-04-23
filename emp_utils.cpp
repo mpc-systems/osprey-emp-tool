@@ -308,7 +308,7 @@ int main(int argc, char** argv) {
 	read_from_file<width, bs>(input_file, input_data);
 
 	NetIO io(party == ALICE ? nullptr : other_ip, port, true);
-	setup_semi_honest(&io, party);
+	setup_semi_honest<party, NetIO>(&io, party);
 
 	double start_cpu_time = get_cpu_time_ms();
 
