@@ -5,6 +5,7 @@ Testing/
 .exrc
 build/
 install/
+tmp/
 CMakeCache.txt
 CMakeFiles/
 Makefile

@@ -3,13 +3,7 @@
 #include "emp-tool/circuits/bit.h"
 namespace emp {
 	class Bit;
-	template <typename T>
-	class Swappable {
-	public:
-		T If(const Bit& sel, const T& rhs) const {
-			return static_cast<const T*>(this)->select(sel, rhs);
-		}
-	};
+
 	template <typename T>
 	inline T If(const Bit& select, const T& o1, const T& o2) {
 		T res = o2;

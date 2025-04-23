@@ -9,11 +9,7 @@ namespace emp {
 	class ProtocolExecution {
 	public:
 		int cur_party;
-#ifndef THREADING
 		inline static ProtocolExecution* prot_exec = nullptr;
-#else
-		inline static __thread ProtocolExecution* prot_exec = nullptr;
-#endif
 
 		ProtocolExecution(int party = PUBLIC) : cur_party(party) {
 		}

@@ -7,28 +7,65 @@
 #include "emp-tool/utils/utils.h"
 
 namespace emp {
-	class Bit : public Swappable<Bit> {
+	class Bit {
 	public:
 		block bit;
 
-		Bit(bool _b = false, int party = PUBLIC);
+		Bit(bool _b = false, int party = PUBLIC) {
+			if (party == PUBLIC)
+				bit = CircuitExecution::circ_exec->public_label(_b);
+			else
+				ProtocolExecution::prot_exec->feed(&bit, party, &_b, 1);
+		}
+
 		Bit(const block& a) {
 			memcpy(&bit, &a, sizeof(block));
 		}
 
-		template <typename O = bool>
-		O reveal(int party = PUBLIC) const;
+		Bit operator!=(const Bit& rhs) const {
+			return (*this) ^ rhs;
+		}
 
-		Bit operator!=(const Bit& rhs) const;
-		Bit operator==(const Bit& rhs) const;
-		Bit operator&(const Bit& rhs) const;
-		Bit operator|(const Bit& rhs) const;
-		Bit operator!() const;
+		Bit operator==(const Bit& rhs) const {
+			return !(*this ^ rhs);
+		}
+
+		Bit operator&(const Bit& rhs) const {
+			Bit res;
+			res.bit = CircuitExecution::circ_exec->and_gate(bit, rhs.bit);
+			return res;
+		}
+
+		Bit operator|(const Bit& rhs) const {
+			return (*this ^ rhs) ^ (*this & rhs);
+		}
+
+		Bit operator!() const {
+			return CircuitExecution::circ_exec->not_gate(bit);
+		}
 
 		// swappable
-		Bit select(const Bit& select, const Bit& new_v) const;
-		Bit operator^(const Bit& rhs) const;
-		Bit operator^=(const Bit& rhs);
+		Bit select(const Bit& select, const Bit& new_v) const {
+			Bit tmp = *this;
+			tmp = tmp ^ new_v;
+			tmp = tmp & select;
+			return *this ^ tmp;
+		}
+
+		Bit If(const Bit& sel, const Bit& rhs) const {
+			return static_cast<const Bit*>(this)->select(sel, rhs);
+		}
+
+		Bit operator^(const Bit& rhs) const {
+			Bit res;
+			res.bit = CircuitExecution::circ_exec->xor_gate(bit, rhs.bit);
+			return res;
+		}
+
+		Bit operator^=(const Bit& rhs) {
+			this->bit = CircuitExecution::circ_exec->xor_gate(bit, rhs.bit);
+			return (*this);
+		}
 
 		// batcher
 		template <typename... Args>
@@ -40,6 +77,5 @@ namespace emp {
 			b[0] = data;
 		}
 	};
-#include "emp-tool/circuits/bit.hpp"
 }
 #endif

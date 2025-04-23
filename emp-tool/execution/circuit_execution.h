@@ -11,11 +11,8 @@ namespace emp {
 	 */
 	class CircuitExecution {
 	public:
-#ifndef THREADING
 		inline static CircuitExecution* circ_exec = nullptr;
-#else
-		inline static __thread CircuitExecution* circ_exec = nullptr;
-#endif
+
 		virtual block and_gate(const block& in1, const block& in2) = 0;
 		virtual block xor_gate(const block& in1, const block& in2) = 0;
 		virtual block not_gate(const block& in1) = 0;
