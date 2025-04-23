@@ -212,10 +212,6 @@ namespace emp {
 			return bits.size();
 		}
 
-		template <typename T>
-		T reveal(int party = PUBLIC) const;
-		template <typename T>
-		void reveal(T* output, const int party = PUBLIC) const;
 		template <std::size_t N>
 		std::bitset<N> reveal(int party = PUBLIC) const {
 			std::bitset<N> bs;
@@ -428,56 +424,5 @@ namespace emp {
 			ProtocolExecution::prot_exec->reveal(bools, party, (block*) bits.data(), size());
 		}
 	};
-
-	template <>
-	inline uint32_t Integer::reveal<uint32_t>(int party) const {
-		std::bitset<32> bs;
-		bs.reset();
-		bool b[size()];
-		ProtocolExecution::prot_exec->reveal(b, party, (block*) bits.data(), size());
-		for (size_t i = 0; i < min(32UL, size()); ++i)
-			bs.set(i, b[i]);
-		return bs.to_ulong();
-	}
-
-	template <>
-	inline uint64_t Integer::reveal<uint64_t>(int party) const {
-		std::bitset<64> bs;
-		bs.reset();
-		bool b[size()];
-		ProtocolExecution::prot_exec->reveal(b, party, (block*) bits.data(), size());
-		for (size_t i = 0; i < min(64UL, size()); ++i)
-			bs.set(i, b[i]);
-		return bs.to_ullong();
-	}
-	template <>
-	inline int32_t Integer::reveal<int32_t>(int party) const {
-		return reveal<uint32_t>(party);
-	}
-
-	template <>
-	inline int64_t Integer::reveal<int64_t>(int party) const {
-		return reveal<uint64_t>(party);
-	}
-
-	template <>
-	inline string Integer::reveal<string>(int party) const {
-		bool* b = new bool[size()];
-		string res = "";
-		revealBools(b, party);
-		for (size_t i = 0; i < size(); ++i)
-			res += (b[i] ? "1" : "0");
-		delete[] b;
-		return res;
-	}
-
-	// write the bits of this integer directly into memory wherever output points.
-	template <typename T>
-	inline void Integer::reveal(T* output, const int party) const {
-		bool* b = new bool[size()];
-		revealBools(b, party);
-		from_bool(b, output, size());
-		delete[] b;
-	}
 }
 #endif // INTEGER_H__
