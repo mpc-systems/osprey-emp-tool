@@ -8,9 +8,7 @@
 #include <vector>
 
 #include "emp-tool/circuits/bit.h"
-#include "emp-tool/circuits/comparable.h"
 #include "emp-tool/circuits/number.h"
-#include "emp-tool/circuits/swappable.h"
 using std::min;
 using std::vector;
 namespace emp {
@@ -139,7 +137,7 @@ namespace emp {
 		delete[] quot;
 	}
 
-	class Integer : public Swappable<Integer>, public Comparable<Integer> {
+	class Integer {
 	public:
 		vector<Bit> bits;
 
@@ -200,12 +198,40 @@ namespace emp {
 			return res;
 		}
 
+		Bit operator>=(const Integer& rhs) const {
+			return static_cast<const Integer*>(this)->geq(rhs);
+		}
+
+		Bit operator<(const Integer& rhs) const {
+			return !((*static_cast<const Integer*>(this)) >= rhs);
+		}
+
+		Bit operator<=(const Integer& rhs) const {
+			return rhs >= *static_cast<const Integer*>(this);
+		}
+
+		Bit operator>(const Integer& rhs) const {
+			return !(rhs >= *static_cast<const Integer*>(this));
+		}
+
+		Bit operator==(const Integer& rhs) const {
+			return static_cast<const Integer*>(this)->equal(rhs);
+		}
+
+		Bit operator!=(const Integer& rhs) const {
+			return !(*static_cast<const Integer*>(this) == rhs);
+		}
+
 		// Swappable
 		Integer select(const Bit& sel, const Integer& rhs) const {
 			Integer res(*this);
 			for (size_t i = 0; i < size(); ++i)
 				res[i] = bits[i].select(sel, rhs[i]);
 			return res;
+		}
+
+		Integer If(const Bit& sel, const Integer& rhs) const {
+			return static_cast<const Integer*>(this)->select(sel, rhs);
 		}
 
 		size_t size() const {
