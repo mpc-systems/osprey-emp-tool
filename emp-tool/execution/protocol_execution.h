@@ -210,7 +210,8 @@ namespace emp {
 
 	template <int party, typename IO>
 	struct SemiHonestInternal {
-		inline static typename std::conditional<party == ALICE, SemiHonestGen<IO>, SemiHonestEva<IO>>::type* prot_exec = nullptr;
+		inline static typename std::conditional<party == ALICE, SemiHonestGen<IO>, SemiHonestEva<IO>>::type* prot_exec =
+			nullptr;
 	};
 
 #ifdef PARTY

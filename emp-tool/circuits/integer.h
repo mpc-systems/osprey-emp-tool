@@ -4,13 +4,13 @@
 #include <math.h>
 
 #include <algorithm>
+#include <array>
 #include <bitset>
-#include <vector>
 
 #include "emp-tool/circuits/bit.h"
 #include "emp-tool/circuits/number.h"
+using std::array;
 using std::min;
-using std::vector;
 namespace emp {
 
 	// https://github.com/samee/obliv-c/blob/obliv-c/src/ext/oblivc/obliv_bits.c#L1487
@@ -137,60 +137,54 @@ namespace emp {
 		delete[] quot;
 	}
 
+	template <std::size_t nbits>
 	class Integer {
 	public:
-		vector<Bit> bits;
+		array<Bit, nbits> bits;
 
 		Integer() {
 		}
 
-		Integer(const vector<Bit>& bits) : bits(bits) {
+		Integer(const array<Bit, nbits>& bits) : bits(bits) {
 		}
 
-		Integer(int length, int64_t input, int party = PUBLIC) {
-			bool* b = new bool[length];
-			int_to_bool<int64_t>(b, input, length);
-			init(b, length, party);
-			delete[] b;
-		}
-
-		template <typename T>
-		Integer(int length, T* input, int party = PUBLIC) {
-			bool* b = new bool[length];
-			to_bool<T>(b, input, length);
-			init(b, length, party);
-			delete[] b;
+		Integer(int64_t input, int party = PUBLIC) {
+			bool b[nbits] = {false};
+			int_to_bool<int64_t>(b, input, nbits);
+			init(b, party);
 		}
 
 		template <typename T>
-		Integer(T* input, int party = PUBLIC) {
-			size_t len = 8 * sizeof(T);
-			bool* b = new bool[len];
-			to_bool<T>(b, input, len);
-			init(b, len, party);
-			delete[] b;
+		Integer(T* input, int party = PUBLIC) requires(!std::is_same_v<T, Bit>) {
+			bool b[nbits] = {false};
+			to_bool<T>(b, input, nbits);
+			init(b, party);
 		}
 
-		template <std::size_t N>
-		Integer(const std::bitset<N>& input, int party = PUBLIC) {
-			bool* b = new bool[N];
-			for (size_t i = 0; i < N; ++i)
+		template <typename T = Bit>
+		Integer(Bit* input, int party = PUBLIC) requires(std::is_same_v<T, Bit>) {
+			std::memcpy(bits.data(), input, nbits * sizeof(Bit));
+		}
+
+		Integer(const std::bitset<nbits>& input, int party = PUBLIC) {
+			bool b[nbits] = {false};
+			for (size_t i = 0; i < nbits; ++i)
 				b[i] = input[i];
-			init(b, N, party);
-			delete[] b;
+			init(b, party);
 		}
 
 		// Comparable
-		Bit geq(const Integer& rhs) const {
+		// TODO: Fix buggy comparison because of missing resize method
+		Bit geq(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer thisExtend(*this), rhsExtend(rhs);
-			thisExtend.resize(size() + 1, true);
-			rhsExtend.resize(size() + 1, true);
-			Integer tmp = thisExtend - rhsExtend;
+			Integer<nbits> thisExtend(*this), rhsExtend(rhs);
+			// thisExtend.resize(size() + 1, true);
+			// rhsExtend.resize(size() + 1, true);
+			Integer<nbits> tmp = thisExtend - rhsExtend;
 			return !tmp[tmp.size() - 1];
 		}
 
-		Bit equal(const Integer& rhs) const {
+		Bit equal(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
 			Bit res(true);
 			for (size_t i = 0; i < size(); ++i)
@@ -198,147 +192,104 @@ namespace emp {
 			return res;
 		}
 
-		Bit operator>=(const Integer& rhs) const {
-			return static_cast<const Integer*>(this)->geq(rhs);
+		Bit operator>=(const Integer<nbits>& rhs) const {
+			return static_cast<const Integer<nbits>*>(this)->geq(rhs);
 		}
 
-		Bit operator<(const Integer& rhs) const {
-			return !((*static_cast<const Integer*>(this)) >= rhs);
+		Bit operator<(const Integer<nbits>& rhs) const {
+			return !((*static_cast<const Integer<nbits>*>(this)) >= rhs);
 		}
 
-		Bit operator<=(const Integer& rhs) const {
-			return rhs >= *static_cast<const Integer*>(this);
+		Bit operator<=(const Integer<nbits>& rhs) const {
+			return rhs >= *static_cast<const Integer<nbits>*>(this);
 		}
 
-		Bit operator>(const Integer& rhs) const {
-			return !(rhs >= *static_cast<const Integer*>(this));
+		Bit operator>(const Integer<nbits>& rhs) const {
+			return !(rhs >= *static_cast<const Integer<nbits>*>(this));
 		}
 
-		Bit operator==(const Integer& rhs) const {
-			return static_cast<const Integer*>(this)->equal(rhs);
+		Bit operator==(const Integer<nbits>& rhs) const {
+			return static_cast<const Integer<nbits>*>(this)->equal(rhs);
 		}
 
-		Bit operator!=(const Integer& rhs) const {
-			return !(*static_cast<const Integer*>(this) == rhs);
+		Bit operator!=(const Integer<nbits>& rhs) const {
+			return !(*static_cast<const Integer<nbits>*>(this) == rhs);
 		}
 
 		// Swappable
-		Integer select(const Bit& sel, const Integer& rhs) const {
-			Integer res(*this);
+		Integer<nbits> select(const Bit& sel, const Integer<nbits>& rhs) const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < size(); ++i)
 				bits[i].select(sel, rhs[i], res[i]);
 			return res;
 		}
 
-		Integer If(const Bit& sel, const Integer& rhs) const {
-			return static_cast<const Integer*>(this)->select(sel, rhs);
+		Integer<nbits> If(const Bit& sel, const Integer<nbits>& rhs) const {
+			return static_cast<const Integer<nbits>*>(this)->select(sel, rhs);
 		}
 
 		size_t size() const {
 			return bits.size();
 		}
 
-		template <std::size_t N>
-		std::bitset<N> reveal(int party = PUBLIC) const {
-			std::bitset<N> bs;
+		std::bitset<nbits> reveal(int party = PUBLIC) const {
+			std::bitset<nbits> bs;
 			bool b[size()];
 			revealBools(b, party);
-			for (size_t i = 0; i < min(N, size()); ++i)
+			for (size_t i = 0; i < nbits; ++i)
 				bs.set(i, b[i]);
 			return bs;
 		}
 
-		Integer abs() const {
-			Integer res(*this);
+		Integer<nbits> abs() const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < size(); ++i)
 				res[i] = bits[size() - 1];
 			return ((*this) + res) ^ res;
 		}
 
-		Integer& resize(size_t length, bool signed_extend = true) {
-			Bit MSB(false, PUBLIC);
-			if (signed_extend)
-				MSB = bits[bits.size() - 1];
-			bits.resize(length, MSB);
-			return *this;
-		}
-
-		Integer modExp(Integer p, Integer q) {
+		Integer<nbits> modExp(Integer<nbits> p, Integer<nbits> q) {
 			// the value of q should be less than half of the MAX_INT
-			Integer base = *this;
-			Integer res(size(), 1);
+			Integer<nbits> base = *this;
+			Integer<nbits> res(size(), 1);
 			for (size_t i = 0; i < p.size(); ++i) {
-				Integer tmp = (res * base) % q;
+				Integer<nbits> tmp = (res * base) % q;
 				res = res.select(p[i], tmp);
 				base = (base * base) % q;
 			}
 			return res;
 		}
 
-		Integer leading_zeros() const {
-			Integer res = *this;
-			for (int i = size() - 2; i >= 0; --i)
-				res[i] = res[i + 1] | res[i];
-
-			for (size_t i = 0; i < res.size(); ++i)
-				res[i] = !res[i];
-			return res.hamming_weight();
-		}
-		Integer hamming_weight() const {
-			vector<Integer> vec;
-			for (size_t i = 0; i < size(); i++) {
-				Integer tmp(2, 0, PUBLIC);
-				tmp[0] = bits[i];
-				vec.push_back(tmp);
-			}
-
-			while (vec.size() > 1) {
-				size_t j = 0;
-				for (size_t i = 0; i < vec.size() - 1; i += 2) {
-					vec[j++] = vec[i] + vec[i + 1];
-				}
-				if (vec.size() % 2 == 1) {
-					vec[j++] = vec[vec.size() - 1];
-				}
-				for (size_t i = 0; i < j; ++i)
-					vec[i].resize(vec[i].size() + 1, false);
-				size_t vec_size = vec.size();
-				for (size_t i = j; i < vec_size; ++i)
-					vec.pop_back();
-			}
-			return vec[0];
-		}
-
 		// Logical operations
-		inline Integer operator^(const Integer& rhs) const {
-			Integer res(*this);
+		inline Integer<nbits> operator^(const Integer<nbits>& rhs) const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < size(); ++i)
 				res.bits[i] = res.bits[i] ^ rhs.bits[i];
 			return res;
 		}
 
-		inline Integer operator^=(const Integer& rhs) {
+		inline Integer<nbits> operator^=(const Integer<nbits>& rhs) {
 			for (size_t i = 0; i < size(); ++i)
 				this->bits[i] ^= rhs.bits[i];
 			return (*this);
 		}
 
-		inline Integer operator|(const Integer& rhs) const {
-			Integer res(*this);
+		inline Integer<nbits> operator|(const Integer<nbits>& rhs) const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < size(); ++i)
 				res.bits[i] = res.bits[i] | rhs.bits[i];
 			return res;
 		}
 
-		inline Integer operator&(const Integer& rhs) const {
-			Integer res(*this);
+		inline Integer<nbits> operator&(const Integer<nbits>& rhs) const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < size(); ++i)
 				res.bits[i] = res.bits[i] & rhs.bits[i];
 			return res;
 		}
 
-		inline Integer operator<<(size_t shamt) const {
-			Integer res(*this);
+		inline Integer<nbits> operator<<(size_t shamt) const {
+			Integer<nbits> res(*this);
 			if (shamt > size()) {
 				for (size_t i = 0; i < size(); ++i)
 					res.bits[i] = false;
@@ -351,8 +302,8 @@ namespace emp {
 			return res;
 		}
 
-		inline Integer operator>>(size_t shamt) const {
-			Integer res(*this);
+		inline Integer<nbits> operator>>(size_t shamt) const {
+			Integer<nbits> res(*this);
 			if (shamt > size()) {
 				for (size_t i = 0; i < size(); ++i)
 					res.bits[i] = false;
@@ -365,65 +316,65 @@ namespace emp {
 			return res;
 		}
 
-		inline Integer operator<<(const Integer& shamt) const {
-			Integer res(*this);
+		inline Integer<nbits> operator<<(const Integer<nbits>& shamt) const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
 				res = res.select(shamt[i], res << (1 << i));
 			return res;
 		}
 
-		inline Integer operator>>(const Integer& shamt) const {
-			Integer res(*this);
+		inline Integer<nbits> operator>>(const Integer<nbits>& shamt) const {
+			Integer<nbits> res(*this);
 			for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
 				res = res.select(shamt[i], res >> (1 << i));
 			return res;
 		}
 
-		inline Integer operator+(const Integer& rhs) const {
+		inline Integer<nbits> operator+(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer res(*this);
+			Integer<nbits> res(*this);
 			add_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
 			return res;
 		}
 
-		inline Integer operator-(const Integer& rhs) const {
+		inline Integer<nbits> operator-(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer res(*this);
+			Integer<nbits> res(*this);
 			sub_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
 			return res;
 		}
 
-		inline Integer operator*(const Integer& rhs) const {
+		inline Integer<nbits> operator*(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer res(*this);
+			Integer<nbits> res(*this);
 			mul_full(res.bits.data(), bits.data(), rhs.bits.data(), size());
 			return res;
 		}
 
-		inline Integer operator/(const Integer& rhs) const {
+		inline Integer<nbits> operator/(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer res(*this);
-			Integer i1 = abs();
-			Integer i2 = rhs.abs();
+			Integer<nbits> res(*this);
+			Integer<nbits> i1 = abs();
+			Integer<nbits> i2 = rhs.abs();
 			Bit sign = bits[size() - 1] ^ rhs[size() - 1];
 			div_full(res.bits.data(), nullptr, i1.bits.data(), i2.bits.data(), size());
 			condNeg(sign, res.bits.data(), res.bits.data(), size());
 			return res;
 		}
 
-		inline Integer operator%(const Integer& rhs) const {
+		inline Integer<nbits> operator%(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer res(*this);
-			Integer i1 = abs();
-			Integer i2 = rhs.abs();
+			Integer<nbits> res(*this);
+			Integer<nbits> i1 = abs();
+			Integer<nbits> i2 = rhs.abs();
 			Bit sign = bits[size() - 1];
 			div_full(nullptr, res.bits.data(), i1.bits.data(), i2.bits.data(), size());
 			condNeg(sign, res.bits.data(), res.bits.data(), size());
 			return res;
 		}
 
-		inline Integer operator-() const {
-			return Integer(size(), 0, PUBLIC) - (*this);
+		inline Integer<nbits> operator-() const {
+			return Integer<nbits>(size(), 0, PUBLIC) - (*this);
 		}
 
 		inline Bit& operator[](size_t index) {
@@ -434,15 +385,14 @@ namespace emp {
 			return bits[min(index, size() - 1)];
 		}
 
-		void init(bool* b, int len, int party) {
-			bits.resize(len);
+		void init(bool* b, int party) {
 			if (party == PUBLIC) {
 				block one = CircuitExecution::circ_exec->public_label(true);
 				block zero = CircuitExecution::circ_exec->public_label(false);
-				for (int i = 0; i < len; ++i)
+				for (std::size_t i = 0; i < nbits; ++i)
 					bits[i] = b[i] ? one : zero;
 			} else {
-				ProtocolExecution::prot_exec->feed((block*) bits.data(), party, b, len);
+				ProtocolExecution::prot_exec->feed((block*) bits.data(), party, b, nbits);
 			}
 		}
 

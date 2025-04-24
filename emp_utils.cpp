@@ -122,16 +122,16 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 
 template <std::size_t width>
 void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io,
-				  const std::vector<std::bitset<width>>& input_data, std::vector<Integer>& output_data) {
-	std::vector<Integer> alice_output_data;
-	std::vector<Integer> bob_output_data;
+				  const std::vector<std::bitset<width>>& input_data, std::vector<Integer<width>>& output_data) {
+	std::vector<Integer<width>> alice_output_data;
+	std::vector<Integer<width>> bob_output_data;
 
 	std::size_t iters = std::max(input_data.size(), other_input_size);
 	for (std::size_t i = 0; i < iters; i++) {
 		alice_output_data.push_back(
-			Integer((party == ALICE && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), ALICE));
+			Integer<width>((party == ALICE && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), ALICE));
 		bob_output_data.push_back(
-			Integer((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB));
+			Integer<width>((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB));
 	}
 	io.flush();
 	output_data.insert(output_data.end(), alice_output_data.begin(),
@@ -141,17 +141,18 @@ void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io,
 }
 
 template <std::size_t width>
-void decrypt_file(int party, const std::vector<Integer>& input_data, std::vector<std::bitset<width>>& output_data) {
+void decrypt_file(int party, const std::vector<Integer<width>>& input_data,
+				  std::vector<std::bitset<width>>& output_data) {
 	constexpr std::size_t bs = 4096;
 	for (std::size_t i = 0; i < input_data.size(); i += bs) {
-		Integer batch(std::vector<Bit>(0));
+		Integer<width * bs> batch;
 		for (std::size_t j = 0; j < bs; j++) {
 			if (i + j < input_data.size()) {
-				batch.bits.insert(batch.bits.end(), input_data[i + j].bits.begin(), input_data[i + j].bits.end());
+				std::memcpy(&(batch.bits.data()[j * width]), input_data[i + j].bits.data(), width * sizeof(Bit));
 			}
 		}
 
-		std::bitset<width* bs> bbatch = batch.reveal<width * bs>();
+		std::bitset<width* bs> bbatch = batch.reveal();
 		std::size_t output_size = std::min(bs, input_data.size() - i);
 		for (std::size_t j = 0; j < width * output_size; j += width) {
 			std::bitset<width> item(0);
@@ -164,19 +165,20 @@ void decrypt_file(int party, const std::vector<Integer>& input_data, std::vector
 }
 
 template <std::size_t width>
-void merge_sorted(int party, std::size_t problem_size, const std::vector<Integer>& input_data,
-				  std::vector<Integer>& output_data) {
+void merge_sorted(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+				  std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
-	std::vector<Integer> key;
-	std::vector<Integer> value;
+	std::vector<Integer<width>> key;
+	std::vector<Integer<width * 3>> value;
 
 	for (std::size_t i = 0; i < input_data.size(); i += 4) {
 		key.push_back(input_data[i]);
 
-		Integer vitem(std::vector<Bit>(input_data[i + 1].bits.begin(), input_data[i + 1].bits.end()));
-		vitem.bits.insert(vitem.bits.end(), input_data[i + 2].bits.begin(), input_data[i + 2].bits.end());
-		vitem.bits.insert(vitem.bits.end(), input_data[i + 3].bits.begin(), input_data[i + 3].bits.end());
+		Integer<width * 3> vitem;
+		std::memcpy(&(vitem.bits.data()[0]), input_data[i + 1].bits.data(), width * sizeof(Bit));
+		std::memcpy(&(vitem.bits.data()[width]), input_data[i + 2].bits.data(), width * sizeof(Bit));
+		std::memcpy(&(vitem.bits.data()[2 * width]), input_data[i + 3].bits.data(), width * sizeof(Bit));
 		value.push_back(vitem);
 	}
 
@@ -184,28 +186,27 @@ void merge_sorted(int party, std::size_t problem_size, const std::vector<Integer
 
 	for (std::size_t i = 0; i != key.size(); i++) {
 		output_data.push_back(key[i]);
-		output_data.push_back(Integer(std::vector<Bit>(value[i].bits.begin(), value[i].bits.begin() + width)));
-		output_data.push_back(
-			Integer(std::vector<Bit>(value[i].bits.begin() + width, value[i].bits.begin() + 2 * width)));
-		output_data.push_back(
-			Integer(std::vector<Bit>(value[i].bits.begin() + 2 * width, value[i].bits.begin() + 3 * width)));
+		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[0]))));
+		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[width]))));
+		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[2 * width]))));
 	}
 }
 
 template <std::size_t width>
-void full_sort(int party, std::size_t problem_size, const std::vector<Integer>& input_data,
-			   std::vector<Integer>& output_data) {
+void full_sort(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+			   std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
-	std::vector<Integer> key;
-	std::vector<Integer> value;
+	std::vector<Integer<width>> key;
+	std::vector<Integer<width * 3>> value;
 
 	for (std::size_t i = 0; i < input_data.size(); i += 4) {
 		key.push_back(input_data[i]);
 
-		Integer vitem(std::vector<Bit>(input_data[i + 1].bits.begin(), input_data[i + 1].bits.end()));
-		vitem.bits.insert(vitem.bits.end(), input_data[i + 2].bits.begin(), input_data[i + 2].bits.end());
-		vitem.bits.insert(vitem.bits.end(), input_data[i + 3].bits.begin(), input_data[i + 3].bits.end());
+		Integer<width * 3> vitem;
+		std::memcpy(&(vitem.bits.data()[0]), input_data[i + 1].bits.data(), width * sizeof(Bit));
+		std::memcpy(&(vitem.bits.data()[width]), input_data[i + 2].bits.data(), width * sizeof(Bit));
+		std::memcpy(&(vitem.bits.data()[2 * width]), input_data[i + 3].bits.data(), width * sizeof(Bit));
 		value.push_back(vitem);
 	}
 
@@ -213,17 +214,15 @@ void full_sort(int party, std::size_t problem_size, const std::vector<Integer>& 
 
 	for (std::size_t i = 0; i != key.size(); i++) {
 		output_data.push_back(key[i]);
-		output_data.push_back(Integer(std::vector<Bit>(value[i].bits.begin(), value[i].bits.begin() + width)));
-		output_data.push_back(
-			Integer(std::vector<Bit>(value[i].bits.begin() + width, value[i].bits.begin() + 2 * width)));
-		output_data.push_back(
-			Integer(std::vector<Bit>(value[i].bits.begin() + 2 * width, value[i].bits.begin() + 3 * width)));
+		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[0]))));
+		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[width]))));
+		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[2 * width]))));
 	}
 }
 
 template <std::size_t width>
-void loop_join(int party, std::size_t problem_size, const std::vector<Integer>& input_data,
-			   std::vector<Integer>& output_data) {
+void loop_join(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+			   std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
 	if (input_data.size() % 8 != 0) {
@@ -231,18 +230,22 @@ void loop_join(int party, std::size_t problem_size, const std::vector<Integer>& 
 		return;
 	}
 
-	Integer zero(width, 0, PUBLIC);
+	Integer<width> zero(0, PUBLIC);
 
-	std::vector<Integer>::const_iterator table1_input_data_begin = input_data.begin();
-	std::vector<Integer>::const_iterator table1_input_data_end = input_data.begin() + input_data.size() / 2;
-	std::vector<Integer>::const_iterator table2_input_data_begin = input_data.begin() + input_data.size() / 2;
-	std::vector<Integer>::const_iterator table2_input_data_end = input_data.end();
+	typename std::vector<Integer<width>>::const_iterator table1_input_data_begin = input_data.begin();
+	typename std::vector<Integer<width>>::const_iterator table1_input_data_end =
+		input_data.begin() + input_data.size() / 2;
+	typename std::vector<Integer<width>>::const_iterator table2_input_data_begin =
+		input_data.begin() + input_data.size() / 2;
+	typename std::vector<Integer<width>>::const_iterator table2_input_data_end = input_data.end();
 
-	for (std::vector<Integer>::const_iterator i = table1_input_data_begin; i != table1_input_data_end; i += 4) {
-		for (std::vector<Integer>::const_iterator j = table2_input_data_begin; j != table2_input_data_end; j += 4) {
+	for (typename std::vector<Integer<width>>::const_iterator i = table1_input_data_begin; i != table1_input_data_end;
+		 i += 4) {
+		for (typename std::vector<Integer<width>>::const_iterator j = table2_input_data_begin;
+			 j != table2_input_data_end; j += 4) {
 			Bit valid = i->geq(*j);
-			Integer valid_int(std::vector<Bit>(1, !valid));
-			valid_int.resize(width, false);
+			Integer<width> valid_int(0);
+			valid_int[0] = !valid;
 			output_data.push_back(valid_int);
 			output_data.push_back(i->select(valid, zero));
 			output_data.push_back((i + 1)->select(valid, zero));
@@ -257,12 +260,12 @@ void loop_join(int party, std::size_t problem_size, const std::vector<Integer>& 
 }
 
 template <std::size_t width>
-void matrix_vector_multiply(int party, std::size_t problem_size, const std::vector<Integer>& input_data,
-							std::vector<Integer>& output_data) {
+void matrix_vector_multiply(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+							std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
-	std::vector<Integer> vector;
-	std::vector<Integer> matrix;
+	std::vector<Integer<width>> vector;
+	std::vector<Integer<width>> matrix;
 
 	for (std::size_t i = 0; i < input_data.size(); i++) {
 		if (i < problem_size * problem_size) {
@@ -273,7 +276,7 @@ void matrix_vector_multiply(int party, std::size_t problem_size, const std::vect
 	}
 
 	for (std::size_t i = 0; i < problem_size; i++) {
-		Integer result(width, 0);
+		Integer<width> result(width, 0);
 		for (std::size_t j = 0; j < problem_size; j++) {
 			result = result + (matrix[i * problem_size + j] * vector[j]);
 		}
@@ -313,14 +316,14 @@ int main(int argc, char** argv) {
 	double start_cpu_time = get_cpu_time_ms();
 
 	std::chrono::high_resolution_clock::time_point encrypt_start = std::chrono::high_resolution_clock::now();
-	std::vector<Integer> input_data_encrypt;
+	std::vector<Integer<width>> input_data_encrypt;
 	encrypt_file(party, get_other_input_size(party, problem_name, problem_size), io, input_data, input_data_encrypt);
 	std::chrono::high_resolution_clock::time_point encrypt_end = std::chrono::high_resolution_clock::now();
 	std::cout << "Encrypt time: "
 			  << std::chrono::duration_cast<std::chrono::milliseconds>(encrypt_end - encrypt_start).count() << " ms"
 			  << std::endl;
 
-	std::vector<Integer> output_data_encrypt;
+	std::vector<Integer<width>> output_data_encrypt;
 	if (strcmp(problem_name, "merge_sorted") == 0) {
 		merge_sorted<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "full_sort") == 0) {
