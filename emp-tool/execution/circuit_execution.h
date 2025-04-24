@@ -153,7 +153,7 @@ namespace emp {
 
 	template <int party, typename IO>
 	struct HalfGateInternal {
-		inline static std::conditional<party == ALICE, HalfGateGen<IO>, HalfGateEva<IO>>::type* circ_exec = nullptr;
+		inline static typename std::conditional<party == ALICE, HalfGateGen<IO>, HalfGateEva<IO>>::type* circ_exec = nullptr;
 	};
 
 #ifdef PARTY
