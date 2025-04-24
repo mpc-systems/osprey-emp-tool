@@ -4,7 +4,7 @@
 #include "emp-tool/io/net_io_channel.h"
 #include "emp-tool/utils/block.h"
 #include "emp-tool/utils/constants.h"
-#include "emp-tool/utils/mitccrh.h"
+#include "emp-tool/utils/ccrh.h"
 #include "emp-tool/utils/prg.h"
 
 namespace emp {
@@ -15,7 +15,7 @@ namespace emp {
 	 * https://eprint.iacr.org/2014/756.pdf
 	 */
 	inline block halfgates_garble(block LA0, block A1, block LB0, block B1, block delta, block* table,
-								  MITCCRH<8>* mitccrh) {
+								  CCRH* ccrh) {
 		bool pa = getLSB(LA0);
 		bool pb = getLSB(LB0);
 		block HLA0, HA1, HLB0, HB1;
@@ -26,7 +26,7 @@ namespace emp {
 		H[1] = A1;
 		H[2] = LB0;
 		H[3] = B1;
-		mitccrh->hash<2, 2>(H);
+		ccrh->H<4>(H, H);
 		HLA0 = H[0];
 		HA1 = H[1];
 		HLB0 = H[2];
@@ -44,7 +44,7 @@ namespace emp {
 		return W0;
 	}
 
-	inline block halfgates_eval(block A, block B, const block* table, MITCCRH<8>* mitccrh) {
+	inline block halfgates_eval(block A, block B, const block* table, CCRH* ccrh) {
 		block HA, HB, W;
 		int sa, sb;
 
@@ -54,7 +54,7 @@ namespace emp {
 		block H[2];
 		H[0] = A;
 		H[1] = B;
-		mitccrh->hash<2, 1>(H);
+		ccrh->H<2>(H, H);
 		HA = H[0];
 		HB = H[1];
 
@@ -84,9 +84,6 @@ namespace emp {
 		block public_label(bool b) {
 			return static_cast<T*>(this)->public_label(b);
 		}
-		uint64_t num_and() {
-			return static_cast<T*>(this)->num_and();
-		}
 	};
 
 	template <typename IO>
@@ -95,13 +92,12 @@ namespace emp {
 		block delta;
 		IO* io;
 		block constant[2];
-		MITCCRH<8> mitccrh;
+		CCRH ccrh;
 		HalfGateGen(IO* io) : io(io) {
 			block tmp[2];
 			PRG().random_block(tmp, 2);
 			set_delta(tmp[0]);
 			io->send_block(tmp + 1, 1);
-			mitccrh.setS(tmp[1]);
 		}
 		void set_delta(const block& _delta) {
 			delta = set_bit(_delta, 0);
@@ -114,7 +110,7 @@ namespace emp {
 		}
 		block and_gate(const block& a, const block& b) {
 			block table[2];
-			block res = halfgates_garble(a, a ^ delta, b, b ^ delta, delta, table, &mitccrh);
+			block res = halfgates_garble(a, a ^ delta, b, b ^ delta, delta, table, &ccrh);
 			io->send_block(table, 2);
 			return res;
 		}
@@ -124,9 +120,6 @@ namespace emp {
 		block not_gate(const block& a) {
 			return xor_gate(a, public_label(true));
 		}
-		uint64_t num_and() {
-			return mitccrh.gid / 2;
-		}
 	};
 
 	template <typename IO>
@@ -134,12 +127,11 @@ namespace emp {
 	public:
 		IO* io;
 		block constant[2];
-		MITCCRH<8> mitccrh;
+		CCRH ccrh;
 		HalfGateEva(IO* io) : io(io) {
 			set_delta();
 			block tmp;
 			io->recv_block(&tmp, 1);
-			mitccrh.setS(tmp);
 		}
 		void set_delta() {
 			io->recv_block(constant, 2);
@@ -150,16 +142,13 @@ namespace emp {
 		block and_gate(const block& a, const block& b) {
 			block table[2];
 			io->recv_block(table, 2);
-			return halfgates_eval(a, b, table, &mitccrh);
+			return halfgates_eval(a, b, table, &ccrh);
 		}
 		block xor_gate(const block& a, const block& b) {
 			return a ^ b;
 		}
 		block not_gate(const block& a) {
 			return xor_gate(a, public_label(true));
-		}
-		uint64_t num_and() {
-			return mitccrh.gid / 2;
 		}
 	};
 
