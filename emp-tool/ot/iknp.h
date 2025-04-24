@@ -1,7 +1,8 @@
 #ifndef EMP_IKNP_H__
 #define EMP_IKNP_H__
-#include "emp-ot/co.h"
-#include "emp-ot/cot.h"
+#include "emp-tool/ot/co.h"
+#include "emp-tool/ot/cot.h"
+#include "emp-tool/utils/f2k.h"
 
 namespace emp {
 

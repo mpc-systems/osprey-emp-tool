@@ -1,8 +1,10 @@
 #ifndef EMP_OTCO_H__
 #define EMP_OTCO_H__
-#include <emp-tool/emp-tool.h>
 
-#include "emp-ot/ot.h"
+#include "emp-tool/ot/ot.h"
+#include "emp-tool/utils/group.h"
+#include "emp-tool/utils/hash.h"
+
 namespace emp {
 
 	template <typename IO>

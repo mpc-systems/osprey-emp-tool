@@ -1,6 +1,9 @@
 #ifndef EMP_COT_H__
 #define EMP_COT_H__
-#include "emp-ot/ot.h"
+
+#include "emp-tool/ot/ot.h"
+#include "emp-tool/utils/mitccrh.h"
+#include "emp-tool/utils/prg.h"
 
 namespace emp {
 
@@ -24,16 +27,16 @@ namespace emp {
 			io->flush();
 			block pad[2 * ot_bsize];
 			for (int64_t i = 0; i < length; i += ot_bsize) {
-				for (int64_t j = i; j < min(i + ot_bsize, length); ++j) {
+				for (int64_t j = i; j < std::min(i + ot_bsize, length); ++j) {
 					pad[2 * (j - i)] = data[j];
 					pad[2 * (j - i) + 1] = data[j] ^ Delta;
 				}
 				mitccrh.hash<ot_bsize, 2>(pad);
-				for (int64_t j = i; j < min(i + ot_bsize, length); ++j) {
+				for (int64_t j = i; j < std::min(i + ot_bsize, length); ++j) {
 					pad[2 * (j - i)] = pad[2 * (j - i)] ^ data0[j];
 					pad[2 * (j - i) + 1] = pad[2 * (j - i) + 1] ^ data1[j];
 				}
-				io->send_data(pad, 2 * sizeof(block) * min(ot_bsize, length - i));
+				io->send_data(pad, 2 * sizeof(block) * std::min(ot_bsize, length - i));
 			}
 			delete[] data;
 		}
@@ -48,9 +51,9 @@ namespace emp {
 			block res[2 * ot_bsize];
 			block pad[ot_bsize];
 			for (int64_t i = 0; i < length; i += ot_bsize) {
-				memcpy(pad, data + i, min(ot_bsize, length - i) * sizeof(block));
+				memcpy(pad, data + i, std::min(ot_bsize, length - i) * sizeof(block));
 				mitccrh.hash<ot_bsize, 1>(pad);
-				io->recv_data(res, 2 * sizeof(block) * min(ot_bsize, length - i));
+				io->recv_data(res, 2 * sizeof(block) * std::min(ot_bsize, length - i));
 				for (int64_t j = 0; j < ot_bsize and j < length - i; ++j) {
 					data[i + j] = res[2 * j + r[i + j]] ^ pad[j];
 				}
@@ -67,12 +70,12 @@ namespace emp {
 
 			block pad[ot_bsize * 2];
 			for (int64_t i = 0; i < length; i += ot_bsize) {
-				for (int64_t j = i; j < min(i + ot_bsize, length); ++j) {
+				for (int64_t j = i; j < std::min(i + ot_bsize, length); ++j) {
 					pad[2 * (j - i)] = data0[j];
 					pad[2 * (j - i) + 1] = data0[j] ^ Delta;
 				}
 				mitccrh.hash<ot_bsize, 2>(pad);
-				for (int64_t j = i; j < min(i + ot_bsize, length); ++j) {
+				for (int64_t j = i; j < std::min(i + ot_bsize, length); ++j) {
 					data0[j] = pad[2 * (j - i)];
 					data1[j] = pad[2 * (j - i) + 1];
 				}
@@ -87,9 +90,9 @@ namespace emp {
 			io->flush();
 			block pad[ot_bsize];
 			for (int64_t i = 0; i < length; i += ot_bsize) {
-				memcpy(pad, data + i, min(ot_bsize, length - i) * sizeof(block));
+				memcpy(pad, data + i, std::min(ot_bsize, length - i) * sizeof(block));
 				mitccrh.hash<ot_bsize, 1>(pad);
-				memcpy(data + i, pad, min(ot_bsize, length - i) * sizeof(block));
+				memcpy(data + i, pad, std::min(ot_bsize, length - i) * sizeof(block));
 			}
 		}
 	};

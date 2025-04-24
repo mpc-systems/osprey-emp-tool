@@ -1,3 +1,6 @@
+#ifndef EMP_TOOL_H
+#define EMP_TOOL_H
+
 #include <thread>
 
 #include "emp-tool/circuits/bit.h"
@@ -26,3 +29,21 @@
 #include "emp-tool/utils/prp.h"
 #include "emp-tool/utils/tccrh.h"
 #include "emp-tool/utils/utils.h"
+
+namespace emp {
+
+	template <int party, typename IO>
+	inline void setup_semi_honest(IO* io, int batch_size = 1024 * 16) {
+		if constexpr (party == ALICE) {
+			HalfGateGen<IO>* t = new HalfGateGen<IO>(io);
+			CircuitExecution::circ_exec = t;
+			ProtocolExecution::prot_exec = new SemiHonestGen<IO>(io, t);
+		} else {
+			HalfGateEva<IO>* t = new HalfGateEva<IO>(io);
+			CircuitExecution::circ_exec = t;
+			ProtocolExecution::prot_exec = new SemiHonestEva<IO>(io, t);
+		}
+	}
+}
+
+#endif // EMP_TOOL_H
