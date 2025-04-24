@@ -1,5 +1,6 @@
 #ifndef EMP_CIRCUIT_EXECUTION_H__
 #define EMP_CIRCUIT_EXECUTION_H__
+#include "emp-tool/io/highspeed_net_io_channel.h"
 #include "emp-tool/io/net_io_channel.h"
 #include "emp-tool/utils/block.h"
 #include "emp-tool/utils/constants.h"
@@ -168,7 +169,7 @@ namespace emp {
 	};
 
 #ifdef PARTY
-	using CircuitExecution = HalfGateInternal<PARTY, NetIO>;
+	using CircuitExecution = HalfGateInternal<PARTY, HighSpeedNetIO>;
 #else
 #error "Party must be defined at compile time"
 #endif

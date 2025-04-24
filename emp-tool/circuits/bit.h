@@ -36,6 +36,11 @@ namespace emp {
 			return res;
 		}
 
+		Bit operator&=(const Bit& rhs) {
+			this->bit = CircuitExecution::circ_exec->and_gate(bit, rhs.bit);
+			return (*this);
+		}
+
 		Bit operator|(const Bit& rhs) const {
 			return (*this ^ rhs) ^ (*this & rhs);
 		}
@@ -50,6 +55,12 @@ namespace emp {
 			tmp = tmp ^ new_v;
 			tmp = tmp & select;
 			return *this ^ tmp;
+		}
+
+		inline void select(const Bit& select, const Bit& new_v, Bit& out) const {
+			out = *this ^ new_v;
+			out &= select;
+			out ^= *this;
 		}
 
 		Bit If(const Bit& sel, const Bit& rhs) const {

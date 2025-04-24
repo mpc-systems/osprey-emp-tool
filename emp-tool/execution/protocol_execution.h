@@ -3,6 +3,7 @@
 #include <pthread.h>
 
 #include "emp-tool/execution/circuit_execution.h"
+#include "emp-tool/io/highspeed_net_io_channel.h"
 #include "emp-tool/ot/iknp.h"
 #include "emp-tool/utils/block.h"
 #include "emp-tool/utils/constants.h"
@@ -213,7 +214,7 @@ namespace emp {
 	};
 
 #ifdef PARTY
-	using ProtocolExecution = SemiHonestInternal<PARTY, NetIO>;
+	using ProtocolExecution = SemiHonestInternal<PARTY, HighSpeedNetIO>;
 #else
 #error "Party must be defined at compile time"
 #endif

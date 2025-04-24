@@ -226,7 +226,7 @@ namespace emp {
 		Integer select(const Bit& sel, const Integer& rhs) const {
 			Integer res(*this);
 			for (size_t i = 0; i < size(); ++i)
-				res[i] = bits[i].select(sel, rhs[i]);
+				bits[i].select(sel, rhs[i], res[i]);
 			return res;
 		}
 

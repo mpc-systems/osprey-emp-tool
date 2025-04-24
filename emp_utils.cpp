@@ -121,7 +121,7 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 }
 
 template <std::size_t width>
-void encrypt_file(int party, std::size_t other_input_size, NetIO& io, const std::vector<std::bitset<width>>& input_data,
+void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io, const std::vector<std::bitset<width>>& input_data,
 				  std::vector<Integer>& output_data) {
 	std::vector<Integer> alice_output_data;
 	std::vector<Integer> bob_output_data;
@@ -307,8 +307,8 @@ int main(int argc, char** argv) {
 	std::vector<std::bitset<width>> input_data;
 	read_from_file<width, bs>(input_file, input_data);
 
-	NetIO io(party == ALICE ? nullptr : other_ip, port, true);
-	setup_semi_honest<party, NetIO>(&io, party);
+	HighSpeedNetIO io(party == ALICE ? nullptr : other_ip, port, port + 1, true);
+	setup_semi_honest<party, HighSpeedNetIO>(&io, party);
 
 	double start_cpu_time = get_cpu_time_ms();
 
