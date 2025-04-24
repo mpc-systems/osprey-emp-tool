@@ -121,8 +121,8 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 }
 
 template <std::size_t width>
-void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io, const std::vector<std::bitset<width>>& input_data,
-				  std::vector<Integer>& output_data) {
+void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io,
+				  const std::vector<std::bitset<width>>& input_data, std::vector<Integer>& output_data) {
 	std::vector<Integer> alice_output_data;
 	std::vector<Integer> bob_output_data;
 

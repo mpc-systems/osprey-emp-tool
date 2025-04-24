@@ -4,7 +4,7 @@
 #include "emp-tool/io/net_io_channel.h"
 #include "emp-tool/utils/block.h"
 #include "emp-tool/utils/constants.h"
-#include "emp-tool/utils/ccrh.h"
+#include "emp-tool/utils/mh.h"
 #include "emp-tool/utils/prg.h"
 
 namespace emp {
@@ -14,8 +14,7 @@ namespace emp {
 	 * [REF] Implementation of "Two Halves Make a Whole"
 	 * https://eprint.iacr.org/2014/756.pdf
 	 */
-	inline block halfgates_garble(block LA0, block A1, block LB0, block B1, block delta, block* table,
-								  CCRH* ccrh) {
+	inline block halfgates_garble(block LA0, block A1, block LB0, block B1, block delta, block* table, MH* mh) {
 		bool pa = getLSB(LA0);
 		bool pb = getLSB(LB0);
 		block HLA0, HA1, HLB0, HB1;
@@ -26,7 +25,7 @@ namespace emp {
 		H[1] = A1;
 		H[2] = LB0;
 		H[3] = B1;
-		ccrh->H<4>(H, H);
+		mh->hash<2, 2>(H, H);
 		HLA0 = H[0];
 		HA1 = H[1];
 		HLB0 = H[2];
@@ -44,7 +43,7 @@ namespace emp {
 		return W0;
 	}
 
-	inline block halfgates_eval(block A, block B, const block* table, CCRH* ccrh) {
+	inline block halfgates_eval(block A, block B, const block* table, MH* mh) {
 		block HA, HB, W;
 		int sa, sb;
 
@@ -54,7 +53,7 @@ namespace emp {
 		block H[2];
 		H[0] = A;
 		H[1] = B;
-		ccrh->H<2>(H, H);
+		mh->hash<2, 1>(H, H);
 		HA = H[0];
 		HB = H[1];
 
@@ -92,7 +91,7 @@ namespace emp {
 		block delta;
 		IO* io;
 		block constant[2];
-		CCRH ccrh;
+		MH mh;
 		HalfGateGen(IO* io) : io(io) {
 			block tmp[2];
 			PRG().random_block(tmp, 2);
@@ -110,7 +109,7 @@ namespace emp {
 		}
 		block and_gate(const block& a, const block& b) {
 			block table[2];
-			block res = halfgates_garble(a, a ^ delta, b, b ^ delta, delta, table, &ccrh);
+			block res = halfgates_garble(a, a ^ delta, b, b ^ delta, delta, table, &mh);
 			io->send_block(table, 2);
 			return res;
 		}
@@ -127,7 +126,7 @@ namespace emp {
 	public:
 		IO* io;
 		block constant[2];
-		CCRH ccrh;
+		MH mh;
 		HalfGateEva(IO* io) : io(io) {
 			set_delta();
 			block tmp;
@@ -142,7 +141,7 @@ namespace emp {
 		block and_gate(const block& a, const block& b) {
 			block table[2];
 			io->recv_block(table, 2);
-			return halfgates_eval(a, b, table, &ccrh);
+			return halfgates_eval(a, b, table, &mh);
 		}
 		block xor_gate(const block& a, const block& b) {
 			return a ^ b;
