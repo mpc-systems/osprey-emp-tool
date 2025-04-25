@@ -236,22 +236,28 @@ void loop_join(int party, std::size_t problem_size, const std::vector<Integer<wi
 		input_data.begin() + input_data.size() / 2;
 	typename std::vector<Integer<width>>::const_iterator table2_input_data_end = input_data.end();
 
+	const std::size_t table_size = input_data.size() / 8;
+	output_data.resize(table_size * table_size * 9);
+
+	std::size_t iter = 0;
 	for (typename std::vector<Integer<width>>::const_iterator i = table1_input_data_begin; i != table1_input_data_end;
 		 i += 4) {
 		for (typename std::vector<Integer<width>>::const_iterator j = table2_input_data_begin;
 			 j != table2_input_data_end; j += 4) {
+			iter += 1;
+
 			Bit valid = i->geq(*j);
 			Integer<width> valid_int(0);
 			valid_int[0] = !valid;
-			output_data.push_back(valid_int);
-			output_data.push_back(i->select(valid, zero));
-			output_data.push_back((i + 1)->select(valid, zero));
-			output_data.push_back((i + 2)->select(valid, zero));
-			output_data.push_back((i + 3)->select(valid, zero));
-			output_data.push_back(j->select(valid, zero));
-			output_data.push_back((j + 1)->select(valid, zero));
-			output_data.push_back((j + 2)->select(valid, zero));
-			output_data.push_back((j + 3)->select(valid, zero));
+			output_data[iter] = valid_int;
+			output_data[iter + 1] = i->select(valid, zero);
+			output_data[iter + 2] = (i + 1)->select(valid, zero);
+			output_data[iter + 3] = (i + 2)->select(valid, zero);
+			output_data[iter + 4] = (i + 3)->select(valid, zero);
+			output_data[iter + 5] = j->select(valid, zero);
+			output_data[iter + 6] = (j + 1)->select(valid, zero);
+			output_data[iter + 7] = (j + 2)->select(valid, zero);
+			output_data[iter + 8] = (j + 3)->select(valid, zero);
 		}
 	}
 }
