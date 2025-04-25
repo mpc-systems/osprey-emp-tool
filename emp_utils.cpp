@@ -267,23 +267,13 @@ void matrix_vector_multiply(int party, std::size_t problem_size, const std::vect
 							std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
-	std::vector<Integer<width>> vector;
-	std::vector<Integer<width>> matrix;
-
-	for (std::size_t i = 0; i < input_data.size(); i++) {
-		if (i < problem_size * problem_size) {
-			matrix.push_back(input_data[i]);
-		} else {
-			vector.push_back(input_data[i]);
-		}
-	}
-
+	output_data.resize(problem_size);
 	for (std::size_t i = 0; i < problem_size; i++) {
-		Integer<width> result(width, 0);
+		Integer<width> result(0);
 		for (std::size_t j = 0; j < problem_size; j++) {
-			result = result + (matrix[i * problem_size + j] * vector[j]);
+			result = result + (input_data[i * problem_size + j] * input_data[problem_size * problem_size + j]);
 		}
-		output_data.push_back(result);
+		output_data[i] = result;
 	}
 }
 
