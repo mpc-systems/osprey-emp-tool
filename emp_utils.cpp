@@ -127,17 +127,12 @@ void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io,
 	std::vector<Integer<width>> bob_output_data;
 
 	std::size_t iters = std::max(input_data.size(), other_input_size);
+	output_data.resize(iters * 2);
 	for (std::size_t i = 0; i < iters; i++) {
-		alice_output_data.push_back(
-			Integer<width>((party == ALICE && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), ALICE));
-		bob_output_data.push_back(
-			Integer<width>((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB));
+		output_data[i] = Integer<width>((party == ALICE && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), ALICE);
+		output_data[i + iters] = Integer<width>((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB);
 	}
 	io.flush();
-	output_data.insert(output_data.end(), alice_output_data.begin(),
-					   alice_output_data.begin() + ((party == ALICE) ? input_data.size() : other_input_size));
-	output_data.insert(output_data.end(), bob_output_data.begin(),
-					   bob_output_data.begin() + ((party == BOB) ? input_data.size() : other_input_size));
 }
 
 template <std::size_t width>
