@@ -11,7 +11,7 @@ target_compile_definitions(emp_utils_evaluator PRIVATE PARTY=2)
 
 foreach(target emp_utils_garbler emp_utils_evaluator)
 	target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR})
-	target_link_libraries(${target} PRIVATE aio ssl crypto gmp)
+	target_link_libraries(${target} PRIVATE ssl crypto)
 	target_compile_options(${target} PRIVATE -pthread -march=native -maes -mrdseed -Ofast -Wall -funroll-loops -Wno-ignored-attributes -Wno-unused-result -Wno-deprecated-declarations)
 	target_compile_features(${target} PRIVATE cxx_std_20)
 endforeach()
