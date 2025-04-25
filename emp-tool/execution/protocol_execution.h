@@ -48,9 +48,6 @@ namespace emp {
 		void reveal(bool* out, int party, const block* lbls, int nel) {
 			static_cast<T*>(this)->reveal(out, party, lbls, nel);
 		}
-		void finalize() {
-			static_cast<T*>(this)->finalize();
-		}
 	};
 
 	template <typename IO>
