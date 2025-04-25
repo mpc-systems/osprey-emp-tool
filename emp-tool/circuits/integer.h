@@ -174,13 +174,11 @@ namespace emp {
 		}
 
 		// Comparable
-		// TODO: Fix buggy comparison because of missing resize method
 		Bit geq(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
-			Integer<nbits> thisExtend(*this), rhsExtend(rhs);
-			// thisExtend.resize(size() + 1, true);
-			// rhsExtend.resize(size() + 1, true);
-			Integer<nbits> tmp = thisExtend - rhsExtend;
+			Integer<nbits + 1> thisExtend = this->resize<nbits + 1>(true);
+			Integer<nbits + 1> rhsExtend = rhs.resize<nbits + 1>(true);
+			Integer<nbits + 1> tmp = thisExtend - rhsExtend;
 			return !tmp[tmp.size() - 1];
 		}
 
@@ -218,14 +216,14 @@ namespace emp {
 
 		// Swappable
 		Integer<nbits> select(const Bit& sel, const Integer<nbits>& rhs) const {
-			Integer<nbits> res(*this);
+			Integer<nbits> res;
 			for (size_t i = 0; i < size(); ++i)
 				bits[i].select(sel, rhs[i], res[i]);
 			return res;
 		}
 
 		Integer<nbits> If(const Bit& sel, const Integer<nbits>& rhs) const {
-			return static_cast<const Integer<nbits>*>(this)->select(sel, rhs);
+			return this->select(sel, rhs);
 		}
 
 		size_t size() const {
@@ -246,6 +244,19 @@ namespace emp {
 			for (size_t i = 0; i < size(); ++i)
 				res[i] = bits[size() - 1];
 			return ((*this) + res) ^ res;
+		}
+
+		template <std::size_t newnbits>
+		Integer<newnbits> resize(bool signed_extend = true) const {
+			static_assert(newnbits >= nbits, "newnbits should be greater than nbits");
+			Bit MSB(false, PUBLIC);
+			if (signed_extend)
+				MSB = bits[bits.size() - 1];
+			Integer<newnbits> res;
+			std::copy(bits.begin(), bits.end(), res.bits.begin());
+			for (size_t i = size(); i < newnbits; ++i)
+				res[i] = MSB;
+			return res;
 		}
 
 		Integer<nbits> modExp(Integer<nbits> p, Integer<nbits> q) {
