@@ -4,12 +4,12 @@
 #include <math.h>
 
 #include <algorithm>
-#include <array>
+#include <vector>
 #include <bitset>
 
 #include "emp-tool/circuits/bit.h"
 #include "emp-tool/circuits/number.h"
-using std::array;
+using std::vector;
 using std::min;
 namespace emp {
 
@@ -140,33 +140,33 @@ namespace emp {
 	template <std::size_t nbits>
 	class Integer {
 	public:
-		array<Bit, nbits> bits;
+		vector<Bit> bits;
 
-		Integer() {
+		Integer() : bits(nbits) {
 		}
 
-		Integer(const array<Bit, nbits>& bits) : bits(bits) {
+		Integer(const vector<Bit>& bits) : bits(bits) {
 		}
 
-		Integer(int64_t input, int party = PUBLIC) {
+		Integer(int64_t input, int party = PUBLIC) : bits(nbits) {
 			bool b[nbits] = {false};
 			int_to_bool<int64_t>(b, input, nbits);
 			init(b, party);
 		}
 
 		template <typename T>
-		Integer(T* input, int party = PUBLIC) requires(!std::is_same_v<T, Bit>) {
+		Integer(T* input, int party = PUBLIC) requires(!std::is_same_v<T, Bit>) : bits(nbits) {
 			bool b[nbits] = {false};
 			to_bool<T>(b, input, nbits);
 			init(b, party);
 		}
 
 		template <typename T = Bit>
-		Integer(Bit* input, int party = PUBLIC) requires(std::is_same_v<T, Bit>) {
+		Integer(Bit* input, int party = PUBLIC) requires(std::is_same_v<T, Bit>) : bits(nbits) {
 			std::memcpy(bits.data(), input, nbits * sizeof(Bit));
 		}
 
-		Integer(const std::bitset<nbits>& input, int party = PUBLIC) {
+		Integer(const std::bitset<nbits>& input, int party = PUBLIC) : bits(nbits) {
 			bool b[nbits] = {false};
 			for (size_t i = 0; i < nbits; ++i)
 				b[i] = input[i];
