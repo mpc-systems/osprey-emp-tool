@@ -18,6 +18,8 @@ using std::string;
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "util/address.hpp"
+
 namespace emp {
 
 	class NetIO : public IOChannel<NetIO> {
@@ -31,6 +33,7 @@ namespace emp {
 		string addr;
 		int port;
 		NetIO(const char* address, int port, bool quiet = false) {
+			OSPREY_TOUCH_RANGE(0, 0, false, true, );
 			this->port = port & 0xFFFF;
 			is_server = (address == nullptr);
 			if (address == nullptr) {
@@ -96,6 +99,7 @@ namespace emp {
 		}
 
 		~NetIO() {
+			OSPREY_TOUCH_RANGE(0, 0, false, true, );
 			flush();
 			fclose(stream);
 			delete[] buffer;
@@ -112,6 +116,7 @@ namespace emp {
 		}
 
 		void flush() {
+			OSPREY_TOUCH_RANGE(0, 0, false, true, );
 			fflush(stream);
 		}
 
