@@ -1,6 +1,10 @@
-cmake_minimum_required (VERSION 2.8.12)
+cmake_minimum_required (VERSION 3.5)
 project (emptool)
 set(NAME "emp-tool")
+
+if ("${OSPREY_SOURCE_DIR}" STREQUAL "")
+message(FATAL_ERROR "Please provide OSPREY_SOURCE_DIR")
+endif()
 
 include(CheckCSourceRuns)
 
@@ -11,7 +15,9 @@ target_compile_definitions(emp_utils_evaluator PRIVATE PARTY=2)
 
 foreach(target emp_utils_garbler emp_utils_evaluator)
 	target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR})
+	target_include_directories(${target} PRIVATE ${OSPREY_SOURCE_DIR})
 	target_link_libraries(${target} PRIVATE ssl crypto)
+	target_link_libraries(${target} PRIVATE ${OSPREY_SOURCE_DIR}/bin/libosprey.so)
 	target_compile_options(${target} PRIVATE -pthread -march=native -maes -mrdseed -Ofast -Wall -funroll-loops -Wno-ignored-attributes -Wno-unused-result -Wno-deprecated-declarations)
 	target_compile_features(${target} PRIVATE cxx_std_20)
 endforeach()

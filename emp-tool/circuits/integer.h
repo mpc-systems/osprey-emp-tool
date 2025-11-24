@@ -9,6 +9,10 @@
 
 #include "emp-tool/circuits/bit.h"
 #include "emp-tool/circuits/number.h"
+
+#include "lib/allocator.hpp"
+#include "util/address.hpp"
+
 using std::vector;
 using std::min;
 namespace emp {
@@ -140,12 +144,12 @@ namespace emp {
 	template <std::size_t nbits>
 	class Integer {
 	public:
-		vector<Bit> bits;
+		vector<Bit, osprey::lib::ContentObliviousAllocator<Bit>> bits;
 
 		Integer() : bits(nbits) {
 		}
 
-		Integer(const vector<Bit>& bits) : bits(bits) {
+		Integer(const vector<Bit, osprey::lib::ContentObliviousAllocator<Bit>>& bits) : bits(bits) {
 		}
 
 		Integer(int64_t input, int party = PUBLIC) : bits(nbits) {
