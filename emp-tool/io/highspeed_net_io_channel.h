@@ -18,6 +18,8 @@ using std::string;
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "util/address.hpp"
+
 namespace emp {
 
 	class SubChannel {
@@ -139,17 +141,22 @@ namespace emp {
 
 		HighSpeedNetIO(const char* address, int send_port, int recv_port, bool quiet = true) : quiet(quiet) {
 			is_server = (address == nullptr);
-			if (is_server) {
-				recv_sock = server_listen(send_port);
-				usleep(2000);
-				send_sock = server_listen(recv_port & 0xFFFF);
+			if (osprey::util::is_speculative) {
+				send_sock = open("/dev/null", O_WRONLY);
+				recv_sock = open("/dev/zero", O_RDONLY);
 			} else {
-				send_sock = client_connect(address, send_port);
-				recv_sock = client_connect(address, recv_port & 0xFFFF);
+				if (is_server) {
+					recv_sock = server_listen(send_port);
+					usleep(2000);
+					send_sock = server_listen(recv_port & 0xFFFF);
+				} else {
+					send_sock = client_connect(address, send_port);
+					recv_sock = client_connect(address, recv_port & 0xFFFF);
+				}
+				FSM = 0;
+				set_delay_opt(send_sock, true);
+				set_delay_opt(recv_sock, true);
 			}
-			FSM = 0;
-			set_delay_opt(send_sock, true);
-			set_delay_opt(recv_sock, true);
 			schannel = new SenderSubChannel(send_sock);
 			rchannel = new RecverSubChannel(recv_sock);
 			if (not quiet)
