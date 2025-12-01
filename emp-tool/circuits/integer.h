@@ -189,6 +189,8 @@ namespace emp {
 		Bit equal(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
 			Bit res(true);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, true, res);
 			for (size_t i = 0; i < size(); ++i)
 				res = res & (bits[i] == rhs[i]);
 			return res;
@@ -221,6 +223,12 @@ namespace emp {
 		// Swappable
 		Integer<nbits> select(const Bit& sel, const Integer<nbits>& rhs) const {
 			Integer<nbits> res;
+			OSPREY_TOUCH_RANGE(
+				reinterpret_cast<std::uintptr_t>(this->bits.data()), this->size() * sizeof(Bit), false, false, res
+			);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			for (size_t i = 0; i < size(); ++i)
 				bits[i].select(sel, rhs[i], res[i]);
 			return res;
@@ -235,6 +243,7 @@ namespace emp {
 		}
 
 		std::bitset<nbits> reveal(int party = PUBLIC) const {
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, true, 0);
 			std::bitset<nbits> bs;
 			bool b[size()];
 			revealBools(b, party);
@@ -245,6 +254,8 @@ namespace emp {
 
 		Integer<nbits> abs() const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
 			for (size_t i = 0; i < size(); ++i)
 				res[i] = bits[size() - 1];
 			return ((*this) + res) ^ res;
@@ -267,6 +278,11 @@ namespace emp {
 			// the value of q should be less than half of the MAX_INT
 			Integer<nbits> base = *this;
 			Integer<nbits> res(size(), 1);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(p.bits.data()), p.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(q.bits.data()), q.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			for (size_t i = 0; i < p.size(); ++i) {
 				Integer<nbits> tmp = (res * base) % q;
 				res = res.select(p[i], tmp);
@@ -278,12 +294,17 @@ namespace emp {
 		// Logical operations
 		inline Integer<nbits> operator^(const Integer<nbits>& rhs) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
 			for (size_t i = 0; i < size(); ++i)
 				res.bits[i] = res.bits[i] ^ rhs.bits[i];
 			return res;
 		}
 
 		inline Integer<nbits> operator^=(const Integer<nbits>& rhs) {
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, rhs);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), true, true, *(this));
 			for (size_t i = 0; i < size(); ++i)
 				this->bits[i] ^= rhs.bits[i];
 			return (*this);
@@ -291,6 +312,10 @@ namespace emp {
 
 		inline Integer<nbits> operator|(const Integer<nbits>& rhs) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			for (size_t i = 0; i < size(); ++i)
 				res.bits[i] = res.bits[i] | rhs.bits[i];
 			return res;
@@ -298,6 +323,10 @@ namespace emp {
 
 		inline Integer<nbits> operator&(const Integer<nbits>& rhs) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			for (size_t i = 0; i < size(); ++i)
 				res.bits[i] = res.bits[i] & rhs.bits[i];
 			return res;
@@ -305,6 +334,8 @@ namespace emp {
 
 		inline Integer<nbits> operator<<(size_t shamt) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
 			if (shamt > size()) {
 				for (size_t i = 0; i < size(); ++i)
 					res.bits[i] = false;
@@ -319,6 +350,9 @@ namespace emp {
 
 		inline Integer<nbits> operator>>(size_t shamt) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			if (shamt > size()) {
 				for (size_t i = 0; i < size(); ++i)
 					res.bits[i] = false;
@@ -333,6 +367,12 @@ namespace emp {
 
 		inline Integer<nbits> operator<<(const Integer<nbits>& shamt) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(
+				reinterpret_cast<std::uintptr_t>(shamt.bits.data()), shamt.size() * sizeof(Bit), false, false, res
+			);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
 				res = res.select(shamt[i], res << (1 << i));
 			return res;
@@ -340,6 +380,12 @@ namespace emp {
 
 		inline Integer<nbits> operator>>(const Integer<nbits>& shamt) const {
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(
+				reinterpret_cast<std::uintptr_t>(shamt.bits.data()), shamt.size() * sizeof(Bit), false, false, res
+			);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			for (size_t i = 0; i < min(size_t(ceil(log2(size()))), shamt.size() - 1); ++i)
 				res = res.select(shamt[i], res >> (1 << i));
 			return res;
@@ -348,6 +394,10 @@ namespace emp {
 		inline Integer<nbits> operator+(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			add_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
 			return res;
 		}
@@ -355,6 +405,10 @@ namespace emp {
 		inline Integer<nbits> operator-(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			sub_full(res.bits.data(), nullptr, bits.data(), rhs.bits.data(), nullptr, size());
 			return res;
 		}
@@ -362,6 +416,10 @@ namespace emp {
 		inline Integer<nbits> operator*(const Integer<nbits>& rhs) const {
 			assert(size() == rhs.size());
 			Integer<nbits> res(*this);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(rhs.bits.data()), rhs.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			mul_full(res.bits.data(), bits.data(), rhs.bits.data(), size());
 			return res;
 		}
@@ -372,6 +430,11 @@ namespace emp {
 			Integer<nbits> i1 = abs();
 			Integer<nbits> i2 = rhs.abs();
 			Bit sign = bits[size() - 1] ^ rhs[size() - 1];
+
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(i1.bits.data()), i1.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(i2.bits.data()), i2.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			div_full(res.bits.data(), nullptr, i1.bits.data(), i2.bits.data(), size());
 			condNeg(sign, res.bits.data(), res.bits.data(), size());
 			return res;
@@ -383,6 +446,11 @@ namespace emp {
 			Integer<nbits> i1 = abs();
 			Integer<nbits> i2 = rhs.abs();
 			Bit sign = bits[size() - 1];
+
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(i1.bits.data()), i1.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(i2.bits.data()), i2.size() * sizeof(Bit), false, false, res);
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(res.bits.data()), res.size() * sizeof(Bit), true, true, res);
+
 			div_full(nullptr, res.bits.data(), i1.bits.data(), i2.bits.data(), size());
 			condNeg(sign, res.bits.data(), res.bits.data(), size());
 			return res;
@@ -401,6 +469,7 @@ namespace emp {
 		}
 
 		void init(bool* b, int party) {
+			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, true, );
 			if (party == PUBLIC) {
 				block one = CircuitExecution::circ_exec->public_label(true);
 				block zero = CircuitExecution::circ_exec->public_label(false);
@@ -415,5 +484,16 @@ namespace emp {
 			ProtocolExecution::prot_exec->reveal(bools, party, (block*) bits.data(), size());
 		}
 	};
+
+	template <std::size_t nbits>
+	inline void swap(const Bit& swap, Integer<nbits>& o1, Integer<nbits>& o2) {
+		Integer<nbits> o = o1.If(swap, o2);
+		OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(o1.bits.data()), o1.size() * sizeof(Bit), false, false, );
+		OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(o2.bits.data()), o2.size() * sizeof(Bit), false, false, );
+		OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(o.bits.data()), o.size() * sizeof(Bit), true, true, );
+		o ^= o2;
+		o1 ^= o;
+		o2 ^= o;
+	}
 }
 #endif // INTEGER_H__

@@ -18,8 +18,6 @@ using std::string;
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "util/address.hpp"
-
 namespace emp {
 
 	class NetIO : public IOChannel<NetIO> {
