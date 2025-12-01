@@ -36,7 +36,6 @@ namespace emp {
 
 	template <int party, typename IO>
 	inline void setup_semi_honest(IO* io, int batch_size = 1024 * 16) {
-		OSPREY_TOUCH_RANGE(0, 0, false, true, );
 		if constexpr (party == ALICE) {
 			HalfGateGen<IO>* t = new HalfGateGen<IO>(io);
 			CircuitExecution::circ_exec = t;

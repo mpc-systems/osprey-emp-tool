@@ -18,7 +18,7 @@ foreach(target emp_utils_garbler emp_utils_evaluator)
 	target_include_directories(${target} PRIVATE ${OSPREY_SOURCE_DIR})
 	target_link_libraries(${target} PRIVATE ssl crypto)
 	target_link_libraries(${target} PRIVATE ${OSPREY_SOURCE_DIR}/bin/libosprey.so)
-	target_compile_options(${target} PRIVATE -pthread -march=native -maes -mrdseed -Ofast -Wall -funroll-loops -Wno-ignored-attributes -Wno-unused-result -Wno-deprecated-declarations)
+	target_compile_options(${target} PRIVATE -g -pthread -march=native -maes -mrdseed -Ofast -Wall -funroll-loops -Wno-ignored-attributes -Wno-unused-result -Wno-deprecated-declarations)
 	target_compile_features(${target} PRIVATE cxx_std_20)
 endforeach()
 

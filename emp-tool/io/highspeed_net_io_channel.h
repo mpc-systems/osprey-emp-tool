@@ -1,6 +1,7 @@
 #ifndef EMP_HIGHSPEED_NETWORK_IO_CHANNEL_H__
 #define EMP_HIGHSPEED_NETWORK_IO_CHANNEL_H__
 
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,10 @@ namespace emp {
 			stream_buf = new char[NETWORK_BUFFER_SIZE];
 			buf = new char[NETWORK_BUFFER_SIZE2];
 			stream = fdopen(sock, "wb+");
+			if (!stream) {
+				perror("fdopen failed");
+				exit(1);
+			}
 			memset(stream_buf, 0, NETWORK_BUFFER_SIZE);
 			setvbuf(stream, stream_buf, _IOFBF, NETWORK_BUFFER_SIZE);
 		}
@@ -142,8 +147,8 @@ namespace emp {
 		HighSpeedNetIO(const char* address, int send_port, int recv_port, bool quiet = true) : quiet(quiet) {
 			is_server = (address == nullptr);
 			if (osprey::util::is_speculative) {
-				send_sock = open("/dev/null", O_WRONLY);
-				recv_sock = open("/dev/zero", O_RDONLY);
+				send_sock = open("/dev/null", O_RDWR);
+				recv_sock = open("/dev/zero", O_RDWR);
 			} else {
 				if (is_server) {
 					recv_sock = server_listen(send_port);

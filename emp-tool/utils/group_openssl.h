@@ -80,7 +80,7 @@ namespace emp {
 		point = EC_POINT_new(group->ec_group);
 		int ret = EC_POINT_copy(point, p.point);
 		if (ret == 0)
-			error("ECC COPY");
+			printf("ECC COPY");
 	}
 
 	inline Point& Point::operator=(Point p) {
@@ -93,13 +93,13 @@ namespace emp {
 		int ret =
 			EC_POINT_point2oct(group->ec_group, point, POINT_CONVERSION_UNCOMPRESSED, buf, buf_len, group->bn_ctx);
 		if (ret == 0)
-			error("ECC TO_BIN");
+			printf("ECC TO_BIN");
 	}
 
 	inline size_t Point::size() {
 		size_t ret = EC_POINT_point2oct(group->ec_group, point, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, group->bn_ctx);
 		if (ret == 0)
-			error("ECC SIZE_BIN");
+			printf("ECC SIZE_BIN");
 		return ret;
 	}
 
@@ -110,14 +110,14 @@ namespace emp {
 		}
 		int ret = EC_POINT_oct2point(group->ec_group, point, buf, buf_len, group->bn_ctx);
 		if (ret == 0)
-			error("ECC FROM_BIN");
+			printf("ECC FROM_BIN");
 	}
 
 	inline Point Point::add(Point& rhs) {
 		Point ret(group);
 		int res = EC_POINT_add(group->ec_group, ret.point, point, rhs.point, group->bn_ctx);
 		if (res == 0)
-			error("ECC ADD");
+			printf("ECC ADD");
 		return ret;
 	}
 
@@ -125,7 +125,7 @@ namespace emp {
 		Point ret(group);
 		int res = EC_POINT_mul(group->ec_group, ret.point, NULL, point, m.n, group->bn_ctx);
 		if (res == 0)
-			error("ECC MUL");
+			printf("ECC MUL");
 		return ret;
 	}
 
@@ -133,13 +133,13 @@ namespace emp {
 		Point ret(*this);
 		int res = EC_POINT_invert(group->ec_group, ret.point, group->bn_ctx);
 		if (res == 0)
-			error("ECC INV");
+			printf("ECC INV");
 		return ret;
 	}
 	inline bool Point::operator==(Point& rhs) {
 		int ret = EC_POINT_cmp(group->ec_group, point, rhs.point, group->bn_ctx);
 		if (ret == -1)
-			error("ECC CMP");
+			printf("ECC CMP");
 		return (ret == 0);
 	}
 
@@ -178,7 +178,7 @@ namespace emp {
 		Point res(this);
 		int ret = EC_POINT_copy(res.point, EC_GROUP_get0_generator(ec_group));
 		if (ret == 0)
-			error("ECC GEN");
+			printf("ECC GEN");
 		return res;
 	}
 
@@ -186,7 +186,7 @@ namespace emp {
 		Point res(this);
 		int ret = EC_POINT_mul(ec_group, res.point, m.n, NULL, NULL, bn_ctx);
 		if (ret == 0)
-			error("ECC GEN MUL");
+			printf("ECC GEN MUL");
 		return res;
 	}
 }
