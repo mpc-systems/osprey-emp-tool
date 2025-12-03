@@ -123,16 +123,15 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 template <std::size_t width>
 void encrypt_file(int party, std::size_t other_input_size, HighSpeedNetIO& io,
 				  const std::vector<std::bitset<width>>& input_data, std::vector<Integer<width>>& output_data) {
-	std::vector<Integer<width>> alice_output_data;
-	std::vector<Integer<width>> bob_output_data;
-
 	std::size_t iters = std::max(input_data.size(), other_input_size);
-	output_data.resize(iters * 2);
+	output_data.resize(input_data.size() + other_input_size);
 	for (std::size_t i = 0; i < iters; i++) {
 		output_data[i] =
 			Integer<width>((party == ALICE && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), ALICE);
-		output_data[i + iters] =
-			Integer<width>((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB);
+		if (i < other_input_size)
+			output_data[i + iters] = Integer<width>((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB);
+		else
+			Integer<width> dummy((party == BOB && i < input_data.size()) ? input_data[i] : std::bitset<width>(0), BOB);
 	}
 	io.flush();
 }
