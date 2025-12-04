@@ -238,8 +238,8 @@ namespace emp {
 			return this->select(sel, rhs);
 		}
 
-		size_t size() const {
-			return bits.size();
+		constexpr size_t size() const {
+			return nbits;
 		}
 
 		std::bitset<nbits> reveal(int party = PUBLIC) const {
@@ -484,16 +484,5 @@ namespace emp {
 			ProtocolExecution::prot_exec->reveal(bools, party, (block*) bits.data(), size());
 		}
 	};
-
-	template <std::size_t nbits>
-	inline void swap(const Bit& swap, Integer<nbits>& o1, Integer<nbits>& o2) {
-		Integer<nbits> o = o1.If(swap, o2);
-		OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(o1.bits.data()), o1.size() * sizeof(Bit), false, false, );
-		OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(o2.bits.data()), o2.size() * sizeof(Bit), false, false, );
-		OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(o.bits.data()), o.size() * sizeof(Bit), true, true, );
-		o ^= o2;
-		o1 ^= o;
-		o2 ^= o;
-	}
 }
 #endif // INTEGER_H__
