@@ -242,6 +242,10 @@ namespace emp {
 			return nbits;
 		}
 
+		constexpr size_t data_size() const {
+			return nbits * sizeof(Bit);
+		}
+
 		std::bitset<nbits> reveal(int party = PUBLIC) const {
 			OSPREY_TOUCH_RANGE(reinterpret_cast<std::uintptr_t>(this->bits.data()), size() * sizeof(Bit), false, true, 0);
 			std::bitset<nbits> bs;
