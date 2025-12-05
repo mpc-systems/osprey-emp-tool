@@ -16,11 +16,16 @@ void write(std::ofstream& stream, const T value) {
 	stream.write(reinterpret_cast<const char*>(&value), width);
 }
 
-void write_record(std::ofstream& stream, const std::uint64_t value) {
+void write_record(std::ofstream& stream, const std::uint64_t value, std::size_t value_width = 4) {
 	write<std::uint64_t, 4>(stream, value);
-	write<std::uint64_t, 4>(stream, 0);
-	write<std::uint64_t, 4>(stream, 0);
-	write<std::uint64_t, 4>(stream, 0);
+
+	if (value_width < 1) {
+		return;
+	}
+
+	for (std::size_t i = 0; i < value_width; i++) {
+		write<std::uint64_t, 4>(stream, 0);
+	}
 }
 
 int main(int argc, char** argv) {
@@ -53,11 +58,11 @@ int main(int argc, char** argv) {
 		if (option == "") {
 			for (std::uint64_t i = 0; i != input_size * 2; i++) {
 				if (i < input_size) {
-					write_record(garbler_file, 2 * i);
+					write_record(garbler_file, 2 * i, 15);
 				} else {
-					write_record(evaluator_file, 2 * (2 * input_size - i - 1) + 1);
+					write_record(evaluator_file, 2 * (2 * input_size - i - 1) + 1, 15);
 				}
-				write_record(expected_file, i);
+				write_record(expected_file, i, 15);
 			}
 		} else if (option == "random") {
 			std::vector<std::uint32_t> sorted(2 * input_size);
@@ -68,11 +73,11 @@ int main(int argc, char** argv) {
 			std::random_shuffle(array.begin(), array.end());
 			for (std::uint64_t i = 0; i != input_size * 2; i++) {
 				if (i < input_size) {
-					write_record(garbler_file, array[i]);
+					write_record(garbler_file, array[i], 15);
 				} else {
-					write_record(evaluator_file, array[i]);
+					write_record(evaluator_file, array[i], 15);
 				}
-				write_record(expected_file, sorted[i]);
+				write_record(expected_file, sorted[i], 15);
 			}
 		} else {
 			std::cerr << "Unknown option " << option << std::endl;
