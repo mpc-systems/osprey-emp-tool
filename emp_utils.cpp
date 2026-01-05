@@ -14,6 +14,9 @@
 
 using namespace emp;
 
+#include "senate_tpc_h/q4.cpp"
+#include "senate_tpc_h/q8.cpp"
+
 double get_cpu_time_ms() {
 	pid_t pid = getpid();
 	std::ifstream stat_file("/proc/" + std::to_string(pid) + "/stat");
@@ -114,6 +117,10 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 		} else {
 			return problem_size * problem_size;
 		}
+	} else if (strcmp(problem_name, "tpc_h_q4") == 0) {
+		return senate_tpc_h_q4::get_other_input_size(party, problem_size);
+	} else if (strcmp(problem_name, "tpc_h_q8") == 0) {
+		return senate_tpc_h_q8::get_other_input_size(party, problem_size);
 	} else {
 		std::cerr << "Unknown problem name " << problem_name << std::endl;
 		std::abort();
@@ -324,6 +331,10 @@ int main(int argc, char** argv) {
 		loop_join<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "matrix_vector_multiply") == 0) {
 		matrix_vector_multiply<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
+	} else if (strcmp(problem_name, "tpc_h_q4") == 0) {
+		senate_tpc_h_q4::join_and_aggregate<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
+	} else if (strcmp(problem_name, "tpc_h_q8") == 0) {
+		senate_tpc_h_q8::join_and_aggregate<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else {
 		std::cerr << "Unknown problem name" << std::endl;
 		return 1;

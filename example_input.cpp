@@ -174,6 +174,36 @@ int main(int argc, char** argv) {
 		} else {
 			std::cerr << "Unknown option " << option << std::endl;
 		}
+	} else if (problem_name == "tpc_h_q4") {
+		for (std::uint64_t i = 0; i != input_size; i++) {
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+		}
+
+		for (std::uint64_t i = 0; i != input_size; i++) {
+			write<std::uint32_t, 4>(evaluator_file, 0);
+		}
+	} else if (problem_name == "tpc_h_q8") {
+		for (std::uint64_t i = 0; i != input_size; i++) {
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+			write<std::uint32_t, 4>(garbler_file, 0);
+		}
+		for (std::uint64_t i = 0; i != input_size; i++) {
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+			write<std::uint32_t, 4>(evaluator_file, 0);
+		}
 	} else {
 		std::cerr << "Unknown problem " << problem_name << std::endl;
 	}
