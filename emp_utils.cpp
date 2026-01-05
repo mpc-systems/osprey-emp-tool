@@ -200,16 +200,18 @@ void full_sort(int party, std::size_t problem_size, const std::vector<Integer<wi
 			   std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
+	constexpr std::size_t value_width_factor = 15;
+
 	std::vector<Integer<width>> key;
-	std::vector<Integer<width * 3>> value;
+	std::vector<Integer<width * value_width_factor>> value;
 
 	for (std::size_t i = 0; i < input_data.size(); i += 4) {
 		key.push_back(input_data[i]);
 
-		Integer<width * 3> vitem;
-		std::memcpy(&(vitem.bits.data()[0]), input_data[i + 1].bits.data(), width * sizeof(Bit));
-		std::memcpy(&(vitem.bits.data()[width]), input_data[i + 2].bits.data(), width * sizeof(Bit));
-		std::memcpy(&(vitem.bits.data()[2 * width]), input_data[i + 3].bits.data(), width * sizeof(Bit));
+		Integer<width * value_width_factor> vitem;
+		for (std::size_t j = 0; j < value_width_factor; j++) {
+			std::memcpy(&(vitem.bits.data()[j * width]), input_data[i + 1 + j].bits.data(), width * sizeof(Bit));
+		}
 		value.push_back(vitem);
 	}
 
@@ -217,9 +219,9 @@ void full_sort(int party, std::size_t problem_size, const std::vector<Integer<wi
 
 	for (std::size_t i = 0; i != key.size(); i++) {
 		output_data.push_back(key[i]);
-		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[0]))));
-		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[width]))));
-		output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[2 * width]))));
+		for (std::size_t j = 0; j < value_width_factor; j++) {
+			output_data.push_back(Integer<width>(static_cast<Bit*>(&(value[i].bits.data()[j * width]))));
+		}
 	}
 }
 
