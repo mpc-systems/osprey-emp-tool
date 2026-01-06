@@ -382,7 +382,7 @@ namespace senate_tpc_h_q4 {
 			final_groups[i].count = output_groups_join[i].count;
 		}
 
-		orderBy(final_groups, 0, s_problem_size, true);
+		// orderBy(final_groups, 0, s_problem_size, true);
 
 		for (int i = 0; i < s_problem_size; i++) {
 			output_data.push_back(final_groups[i].orderPriority);

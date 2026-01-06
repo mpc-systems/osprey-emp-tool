@@ -908,22 +908,22 @@ namespace senate_tpc_h_q8 {
 	void join_and_aggregate(
 		int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data, std::vector<Integer<width>>& output_data
 	) {
-		int c_1 = 1;
-		int c_2 = 2;
-		int c_3 = 4;
-		int c_4 = 3;
-		int c_5 = 2;
-		int c_6 = 3;
-		int c_7 = 1;
+		int c_1_end = 1;
+		int c_2_end = 3;
+		int c_3_end = 7;
+		int c_4_end = 10;
+		int c_5_end = 12;
+		int c_6_end = 15;
+		int c_7_end = 16;
 
 		typename std::vector<Integer<width>>::const_iterator input_data_iter = input_data.begin();
-		std::vector<Integer<width>> input_data_1(input_data_iter, input_data_iter = input_data_iter + c_1 * problem_size);
-		std::vector<Integer<width>> input_data_2(input_data_iter, input_data_iter = input_data_iter + c_2 * problem_size);
-		std::vector<Integer<width>> input_data_3(input_data_iter, input_data_iter = input_data_iter + c_3 * problem_size);
-		std::vector<Integer<width>> input_data_4(input_data_iter, input_data_iter = input_data_iter + c_4 * problem_size);
-		std::vector<Integer<width>> input_data_5(input_data_iter, input_data_iter = input_data_iter + c_5 * problem_size);
-		std::vector<Integer<width>> input_data_6(input_data_iter, input_data_iter = input_data_iter + c_6 * problem_size);
-		std::vector<Integer<width>> input_data_7(input_data_iter, input_data_iter = input_data_iter + c_7 * problem_size);
+		std::vector<Integer<width>> input_data_1(input_data_iter, input_data_iter + c_1_end * problem_size);
+		std::vector<Integer<width>> input_data_2(input_data_iter + c_1_end * problem_size, input_data_iter + c_2_end * problem_size);
+		std::vector<Integer<width>> input_data_3(input_data_iter + c_2_end * problem_size, input_data_iter + c_3_end * problem_size);
+		std::vector<Integer<width>> input_data_4(input_data_iter + c_3_end * problem_size, input_data_iter + c_4_end * problem_size);
+		std::vector<Integer<width>> input_data_5(input_data_iter + c_4_end * problem_size, input_data_iter + c_5_end * problem_size);
+		std::vector<Integer<width>> input_data_6(input_data_iter + c_5_end * problem_size, input_data_iter + c_6_end * problem_size);
+		std::vector<Integer<width>> input_data_7(input_data_iter + c_6_end * problem_size, input_data_iter + c_7_end * problem_size);
 
 		std::vector<orow_13<width>> output_data_1_3(problem_size);
 		std::vector<orow_45<width>> output_data_4_5(problem_size);
