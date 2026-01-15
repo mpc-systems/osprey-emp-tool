@@ -300,7 +300,7 @@ namespace senate_tpc_h_q4 {
 			groups_o[i / 2].count = Integer<width>(1, PUBLIC);
 		}
 
-		// orderBy(groups_o, 0, s_problem_sizse, true);
+		// orderBy(groups_o, 0, s_problem_size, true);
 
 		std::vector<row_12<width>> groups_l(s_problem_size);
 		for (int i = 0; i < s_problem_size; i++) {

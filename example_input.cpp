@@ -179,6 +179,15 @@ int main(int argc, char** argv) {
 		} else {
 			std::cerr << "Unknown option " << option << std::endl;
 		}
+	} else if (problem_name == "pwd") {
+		for (std::uint64_t i = 0; i != input_size * 2; i++) {
+			if (i < input_size) {
+				write<std::uint32_t, 4>(garbler_file, 2 * i);
+			} else {
+				write<std::uint32_t, 4>(evaluator_file, 2 * (2 * input_size - i - 1) + 1);
+			}
+			write<std::uint32_t, 4>(expected_file, i);
+		}
 	} else if (problem_name == "tpc_h_q4") {
 		for (std::uint64_t i = 0; i != input_size; i++) {
 			write<std::uint32_t, 4>(garbler_file, 0);

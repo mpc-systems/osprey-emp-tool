@@ -14,6 +14,7 @@
 
 using namespace emp;
 
+#include "senate_tpc_h/pwd.cpp"
 #include "senate_tpc_h/q4.cpp"
 #include "senate_tpc_h/q8.cpp"
 
@@ -117,6 +118,8 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 		} else {
 			return problem_size * problem_size;
 		}
+	} else if (strcmp(problem_name, "pwd") == 0) {
+		return senate_pwd::get_other_input_size(party, problem_size);
 	} else if (strcmp(problem_name, "tpc_h_q4") == 0) {
 		return senate_tpc_h_q4::get_other_input_size(party, problem_size);
 	} else if (strcmp(problem_name, "tpc_h_q8") == 0) {
@@ -333,6 +336,8 @@ int main(int argc, char** argv) {
 		loop_join<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "matrix_vector_multiply") == 0) {
 		matrix_vector_multiply<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
+	} else if (strcmp(problem_name, "pwd") == 0) {
+		senate_pwd::join_and_aggregate<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "tpc_h_q4") == 0) {
 		senate_tpc_h_q4::join_and_aggregate<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "tpc_h_q8") == 0) {
