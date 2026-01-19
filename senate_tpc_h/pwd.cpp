@@ -1,38 +1,32 @@
 namespace senate_pwd {
 
 	std::size_t get_other_input_size(int party, std::size_t problem_size) {
-		return problem_size;
+		return problem_size * 9;
 	}
 
 	template <std::size_t width>
 	void join_and_aggregate(
 		int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data, std::vector<Integer<width>>& output_data
 	) {
-		// Verify the inputs.
-		{
-			Bit verifyOrder(true);
-			for (int i = 0; i < input_data.size() / 2 - 1; ++i) {
-				Bit lessThanNext = input_data[i].geq(input_data[i+1]);
-				verifyOrder = verifyOrder & !lessThanNext;
+		std::vector<Integer<width>> key;
+		std::vector<Integer<width * 8>> value;
+
+		for (std::size_t i = 0; i < input_data.size(); i += 9) {
+			key.push_back(input_data[i]);
+
+			Integer<width * 8> vitem;
+			for (std::size_t j = 0; j < 8; j++) {
+				std::memcpy(&(vitem.bits.data()[j * width]), input_data[i + 1 + j].bits.data(), width * sizeof(Bit));
 			}
-		}
-		{
-			Bit verifyOrder(true);
-			for (int i = input_data.size() / 2;
-					i < input_data.size() - 1; ++i) {
-				Bit greaterThanNext = input_data[i].geq(input_data[i+1]);
-				verifyOrder = verifyOrder & greaterThanNext;
-			}
+			value.push_back(vitem);
 		}
 
-		output_data.clear();
-		output_data.insert(output_data.end(), input_data.begin(), input_data.end());
-		bitonic_merge(output_data.data(), (Bit *) nullptr, 0, output_data.size(), false);
+		bitonic_merge(key.data(), value.data(), 0, key.size(), true);
 
 		// Everything is sorted now, do a PSU.
-		for (int i = 0; i < output_data.size() - 1; ++i) {
-			Bit equals = output_data[i].equal(output_data[i+1]);
-			output_data[i] = output_data[i].select(equals, Integer<width>(0, PUBLIC));
+		for (int i = 0; i < key.size() - 1; ++i) {
+			Bit equals = key[i].equal(key[i+1]);
+			output_data[i] = key[i].select(equals, Integer<width>(0, PUBLIC));
 		}
 	}
 
