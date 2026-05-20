@@ -37,8 +37,8 @@ int main(int argc, char** argv) {
 	std::size_t input_size = std::stoull(std::string(argv[2]));
 
 	std::string option;
-	if (argc == 5) {
-		option = argv[4];
+	if (argc == 4) {
+		option = argv[3];
 	}
 
 	std::ofstream garbler_file(problem_name + "_" + std::to_string(input_size) + "_garbler.input");
@@ -179,32 +179,39 @@ int main(int argc, char** argv) {
 		} else {
 			std::cerr << "Unknown option " << option << std::endl;
 		}
-	} else if (problem_name == "pwd") {
+	} else if (problem_name == "password") {
+		// Layout matches mage/src/programs/password.cpp: each record is
+		// pw_hash (256 bits, low) followed by user_id (32 bits, high).
+		// Garbler has users 1..N; user 1 has hash 0, the rest have hash 1.
+		// Evaluator has users N..1 (reverse); all have hash 0.
+		// The only (user, pw_hash) pair that matches across parties is (1, 0).
+		bool random = (option == "random");
+		std::default_random_engine generator;
+		std::uniform_int_distribution<std::uint32_t> distribution(0, 1);
 		for (std::uint64_t i = 0; i != input_size * 2; i++) {
 			if (i < input_size) {
-				write<std::uint32_t, 4>(garbler_file, 2 * i);
+				std::uint32_t user = static_cast<std::uint32_t>(i + 1);
+				std::uint32_t hash = random ? distribution(generator) : ((user == 1) ? 0u : 1u);
+				write<std::uint32_t, 4>(garbler_file, hash);
+				for (std::size_t k = 0; k < 7; k++) {
+					write<std::uint32_t, 4>(garbler_file, 0);
+				}
+				write<std::uint32_t, 4>(garbler_file, user);
 
-				write<std::uint32_t, 4>(garbler_file, 2 * i);
-				write<std::uint32_t, 4>(garbler_file, 0);
-				write<std::uint32_t, 4>(garbler_file, 0);
-				write<std::uint32_t, 4>(garbler_file, 0);
-				write<std::uint32_t, 4>(garbler_file, 0);
-				write<std::uint32_t, 4>(garbler_file, 0);
-				write<std::uint32_t, 4>(garbler_file, 0);
-				write<std::uint32_t, 4>(garbler_file, 0);
+				// After sorting by user_id, adjacent pairs are:
+				//   pos 2*i:   garbler user (i+1) vs evaluator user (i+1) — match iff hash == 0
+				//   pos 2*i+1: evaluator user (i+1) vs garbler user (i+2) — different users, always 0
+				write<std::uint32_t, 4>(expected_file, (hash == 0) ? user : 0u);
+				if (i + 1 != input_size) {
+					write<std::uint32_t, 4>(expected_file, 0);
+				}
 			} else {
-				write<std::uint32_t, 4>(evaluator_file, 2 * (2 * input_size - i - 1) + 1);
-
-				write<std::uint32_t, 4>(evaluator_file, 2 * (2 * input_size - i - 1) + 1);
-				write<std::uint32_t, 4>(evaluator_file, 0);
-				write<std::uint32_t, 4>(evaluator_file, 0);
-				write<std::uint32_t, 4>(evaluator_file, 0);
-				write<std::uint32_t, 4>(evaluator_file, 0);
-				write<std::uint32_t, 4>(evaluator_file, 0);
-				write<std::uint32_t, 4>(evaluator_file, 0);
-				write<std::uint32_t, 4>(evaluator_file, 0);
+				std::uint32_t user = static_cast<std::uint32_t>(2 * input_size - i);
+				for (std::size_t k = 0; k < 8; k++) {
+					write<std::uint32_t, 4>(evaluator_file, 0);
+				}
+				write<std::uint32_t, 4>(evaluator_file, user);
 			}
-			write<std::uint32_t, 4>(expected_file, i);
 		}
 	} else {
 		std::cerr << "Unknown problem " << problem_name << std::endl;
