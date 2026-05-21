@@ -114,6 +114,8 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 		} else {
 			return problem_size * problem_size;
 		}
+	} else if (strcmp(problem_name, "password") == 0) {
+		return problem_size * 9;
 	} else {
 		std::cerr << "Unknown problem name " << problem_name << std::endl;
 		std::abort();
@@ -264,6 +266,47 @@ void loop_join(int party, std::size_t problem_size, const std::vector<Integer<wi
 }
 
 template <std::size_t width>
+void password(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+			  std::vector<Integer<width>>& output_data) {
+	static_assert(width % 8 == 0, "Width must be multiple of 8");
+
+	// Record layout matches mage/src/programs/password.cpp:
+	//   words [0..pw_words): pw_hash (256 bits when width == 32, low part of the record)
+	//   word  pw_words:       user_id (sort key, high part of the record)
+	constexpr std::size_t pw_words = 8;
+	constexpr std::size_t record_words = pw_words + 1;
+
+	std::vector<Integer<width>> key;
+	std::vector<Integer<width * pw_words>> value;
+	key.reserve(input_data.size() / record_words);
+	value.reserve(input_data.size() / record_words);
+
+	for (std::size_t i = 0; i < input_data.size(); i += record_words) {
+		key.push_back(input_data[i + pw_words]);
+
+		Integer<width * pw_words> vitem;
+		for (std::size_t j = 0; j < pw_words; j++) {
+			std::memcpy(&(vitem.bits.data()[j * width]), input_data[i + j].bits.data(), width * sizeof(Bit));
+		}
+		value.push_back(vitem);
+	}
+
+	// Alice's records arrive sorted ascending by user_id and Bob's arrive sorted descending
+	// (see emp-tool/example_input.cpp), so the concatenated 2N-record sequence is bitonic
+	// and a single bitonic_merge yields an ascending sort by user_id — matching MAGE's
+	// "Merge the two sorted arrays, sorted by user but not password" step.
+	bitonic_merge(key.data(), value.data(), 0, key.size(), true);
+
+	// For each adjacent pair, output user_id if the full (user_id, pw_hash) records match;
+	// else 0. Produces 2 * problem_size - 1 outputs, matching MAGE's for_each_pair.
+	Integer<width> zero(0, PUBLIC);
+	for (std::size_t i = 0; i + 1 < key.size(); i++) {
+		Bit match = (key[i] == key[i + 1]) & (value[i] == value[i + 1]);
+		output_data.push_back(zero.select(match, key[i]));
+	}
+}
+
+template <std::size_t width>
 void matrix_vector_multiply(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
 							std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
@@ -326,6 +369,8 @@ int main(int argc, char** argv) {
 		loop_join<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "matrix_vector_multiply") == 0) {
 		matrix_vector_multiply<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
+	} else if (strcmp(problem_name, "password") == 0) {
+		password<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else {
 		std::cerr << "Unknown problem name" << std::endl;
 		return 1;
