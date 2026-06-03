@@ -118,6 +118,17 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 		return problem_size * 9;
 	} else if (strcmp(problem_name, "aspirin") == 0) {
 		return problem_size * 3;
+	} else if (strcmp(problem_name, "comorbidity") == 0) {
+		// K_DIAG must match example_input.cpp and the comorbidity function.
+		constexpr std::size_t K_DIAG = 10;
+		constexpr std::size_t DIAGNOSIS_MULTIPLIER = K_DIAG * (K_DIAG + 1) / 2;  // 55
+		if (party == ALICE) {
+			// Bob owns the cohort: problem_size records × 2 words (pid, placeholder).
+			return problem_size * 2;
+		} else {
+			// Alice owns the diagnosis: problem_size · 55 records × 2 words (pid, diag).
+			return problem_size * DIAGNOSIS_MULTIPLIER * 2;
+		}
 	} else {
 		std::cerr << "Unknown problem name " << problem_name << std::endl;
 		std::abort();
@@ -370,6 +381,161 @@ void matrix_vector_multiply(int party, std::size_t problem_size, const std::vect
 	}
 }
 
+template <std::size_t width>
+void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+				 std::vector<Integer<width>>& output_data) {
+	static_assert(width % 8 == 0, "Width must be multiple of 8");
+
+	// Mirrors orq's comorbidity benchmark:
+	//   SELECT diag, COUNT(*) FROM diagnosis WHERE pid IN cohort
+	//   GROUP BY diag ORDER BY cnt DESC LIMIT 10
+	//
+	// K_DIAG must match example_input.cpp and get_other_input_size above.
+	constexpr std::size_t K_DIAG = 10;
+	constexpr std::size_t DIAGNOSIS_MULTIPLIER = K_DIAG * (K_DIAG + 1) / 2;  // 55
+	constexpr std::size_t K_TOP = 10;
+
+	const std::size_t M = problem_size;                          // cohort size
+	const std::size_t N = problem_size * DIAGNOSIS_MULTIPLIER;   // diagnosis size
+	const std::size_t total_rows = N + M;
+
+	// input_data layout (produced by encrypt_file):
+	//   [0,         2*N):     Alice's diagnosis rows (pid, diag) × 2 words each
+	//   [2*N, 2*N + 2*M):     Bob's cohort rows (pid, 0_placeholder) × 2 words each
+
+	// Step 1: Unpack into parallel arrays (pid, packed=(diag,tid)).
+	// packed = diag in bits [0, width), tid in bit width. Width+1 bits total.
+	std::vector<Integer<width>> pids;
+	std::vector<Integer<width + 1>> packed;
+	pids.reserve(total_rows);
+	packed.reserve(total_rows);
+
+	for (std::size_t i = 0; i < N; i++) {
+		pids.push_back(input_data[i * 2]);
+		Integer<width + 1> p(0, PUBLIC);
+		for (std::size_t b = 0; b < width; b++) {
+			p[b] = input_data[i * 2 + 1][b];
+		}
+		p[width] = Bit(false, PUBLIC);  // tid = 0 for diagnosis
+		packed.push_back(p);
+	}
+	for (std::size_t i = 0; i < M; i++) {
+		pids.push_back(input_data[2 * N + i * 2]);
+		Integer<width + 1> p(0, PUBLIC);
+		// diag bits already 0 from the constructor; nothing to set.
+		p[width] = Bit(true, PUBLIC);  // tid = 1 for cohort
+		packed.push_back(p);
+	}
+
+	// Step 2: bitonic_merge by pid ASC, carrying packed=(diag,tid).
+	// Concatenated input is bitonic by pid (Alice ASC, Bob DESC — see example_input.cpp).
+	bitonic_merge(pids.data(), packed.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
+
+	// Step 3: Semi-join sweep. For each row, set valid[i] iff this row is
+	// a diagnosis row (tid=0) AND its pid group contains a cohort row (tid=1).
+	// "pid group contains cohort" requires propagating tid bits across all rows
+	// of the same pid; we do this with a forward + backward scan over the sorted array.
+	std::vector<Bit> tids(total_rows);
+	for (std::size_t i = 0; i < total_rows; i++) {
+		tids[i] = packed[i][width];
+	}
+
+	std::vector<Bit> forward_has(total_rows);
+	{
+		Integer<width> fwd_pid(-1, PUBLIC);  // sentinel: all-ones; won't match any real pid
+		Bit fwd_has(false, PUBLIC);
+		Bit zero_bit(false, PUBLIC);
+		for (std::size_t i = 0; i < total_rows; i++) {
+			Bit new_group = (pids[i] != fwd_pid);
+			fwd_has = fwd_has.select(new_group, zero_bit);  // reset on new group
+			fwd_has = fwd_has | tids[i];
+			fwd_pid = pids[i];
+			forward_has[i] = fwd_has;
+		}
+	}
+
+	std::vector<Bit> backward_has(total_rows);
+	{
+		Integer<width> bwd_pid(-1, PUBLIC);
+		Bit bwd_has(false, PUBLIC);
+		Bit zero_bit(false, PUBLIC);
+		for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(total_rows) - 1; i >= 0; i--) {
+			Bit new_group = (pids[i] != bwd_pid);
+			bwd_has = bwd_has.select(new_group, zero_bit);
+			bwd_has = bwd_has | tids[i];
+			bwd_pid = pids[i];
+			backward_has[i] = bwd_has;
+		}
+	}
+
+	std::vector<Bit> valids(total_rows);
+	std::vector<Integer<width>> diags(total_rows);
+	for (std::size_t i = 0; i < total_rows; i++) {
+		valids[i] = (!tids[i]) & (forward_has[i] | backward_has[i]);
+		// Project out pid and tid; only diag (and valid) are needed downstream.
+		for (std::size_t b = 0; b < width; b++) {
+			diags[i][b] = packed[i][b];
+		}
+	}
+
+	// Step 4: bitonic_sort by diag ASC, carrying valid. Input is NOT bitonic
+	// (it was sorted by pid, not diag), so we need a full sort.
+	bitonic_sort(diags.data(), valids.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
+
+	// Step 5: Group-by sweep. After sort, rows with the same diag are contiguous.
+	// Backward pass: running_count[i] = sum of valid bits from i to end-of-group.
+	// At the first row of each group, running_count = total group count.
+	std::vector<Integer<width>> counts(total_rows);
+	{
+		Integer<width> last_diag(-1, PUBLIC);
+		Integer<width> running_count(0, PUBLIC);
+		for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(total_rows) - 1; i >= 0; i--) {
+			Bit same_diag = (diags[i] == last_diag);
+			Integer<width> valid_int(0, PUBLIC);
+			valid_int[0] = valids[i];
+			Integer<width> accumulated = running_count + valid_int;
+			// running_count = same_diag ? accumulated : valid_int (reset on new group)
+			running_count = valid_int.select(same_diag, accumulated);
+			last_diag = diags[i];
+			counts[i] = running_count;
+		}
+	}
+
+	// Mask counts: keep them only at the first row of each group; zero elsewhere.
+	// This ensures top-K selection picks one representative per group.
+	{
+		Integer<width> zero_int(0, PUBLIC);
+		for (std::size_t i = 1; i < total_rows; i++) {
+			Bit is_first = (diags[i] != diags[i - 1]);
+			counts[i] = zero_int.select(is_first, counts[i]);
+		}
+		// counts[0] is always at a group boundary (no predecessor) — keep as is.
+	}
+
+	// Step 6: Top-K selection via bubble-style network. K = K_TOP = 10.
+	// After K passes, positions [0, K) hold the K largest counts (DESC),
+	// with their associated diag values. No full sort needed.
+	for (std::size_t r = 0; r < K_TOP && r < total_rows; r++) {
+		for (std::size_t j = total_rows - 1; j > r; j--) {
+			Bit swap_it = counts[j] > counts[j - 1];
+			Integer<width> ca = counts[j - 1];
+			Integer<width> cb = counts[j];
+			counts[j - 1] = ca.select(swap_it, cb);
+			counts[j] = cb.select(swap_it, ca);
+			Integer<width> da = diags[j - 1];
+			Integer<width> db = diags[j];
+			diags[j - 1] = da.select(swap_it, db);
+			diags[j] = db.select(swap_it, da);
+		}
+	}
+
+	// Output top-K_TOP (diag, count) pairs.
+	for (std::size_t r = 0; r < K_TOP; r++) {
+		output_data.push_back(diags[r]);
+		output_data.push_back(counts[r]);
+	}
+}
+
 int main(int argc, char** argv) {
 #ifdef PARTY
 	constexpr int party = PARTY;
@@ -422,6 +588,8 @@ int main(int argc, char** argv) {
 		password<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "aspirin") == 0) {
 		aspirin<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
+	} else if (strcmp(problem_name, "comorbidity") == 0) {
+		comorbidity<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else {
 		std::cerr << "Unknown problem name" << std::endl;
 		return 1;

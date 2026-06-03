@@ -241,6 +241,51 @@ int main(int argc, char** argv) {
 		// MAGE also outputs an order-validity bit before the count; we skip it
 		// here because the input format guarantees the bitonic precondition.
 		write<std::uint32_t, 4>(expected_file, static_cast<std::uint32_t>(input_size - 1));
+	} else if (problem_name == "comorbidity") {
+		// Mirrors orq's comorbidity benchmark (bench/queries/other/comorbidity.cpp):
+		//   SELECT diag, COUNT(*) FROM diagnosis WHERE pid IN cohort
+		//   GROUP BY diag ORDER BY cnt DESC LIMIT 10
+		//
+		// Threat model: Alice (garbler) holds the diagnosis table {pid, diag};
+		// Bob (evaluator) holds the cohort table {pid}. Both learn the top-10
+		// (diag, count) pairs.
+		//
+		// K_DIAG must match emp_utils.cpp::comorbidity. Records are 2 × uint32
+		// (pid, diag) for both parties; cohort rows use diag = 0 as a placeholder.
+		//
+		// Test data is chosen so the top-10 has unique, predictable counts:
+		//   - Cohort: patients 0..M-1 (so every diagnosis row passes the semi-join).
+		//   - Diagnosis: for each (p, d) with p ∈ [0, M) and d ∈ [0, K_DIAG),
+		//     include (K_DIAG − d) records of (pid=p, diag=d).
+		//   - Result: count[d] = M · (K_DIAG − d), giving top-10
+		//     (0, M·K_DIAG), (1, M·(K_DIAG−1)), ..., (K_DIAG−1, M).
+		constexpr std::uint32_t K_DIAG = 10;
+
+		// Bob (cohort) writes pids in DESCENDING order so the concatenated
+		// cohort+diagnosis array is bitonic by pid.
+		for (std::uint64_t i = 0; i != input_size; i++) {
+			std::uint32_t pid = static_cast<std::uint32_t>(input_size - 1 - i);
+			write<std::uint32_t, 4>(evaluator_file, pid);
+			write<std::uint32_t, 4>(evaluator_file, 0);  // diag placeholder
+		}
+
+		// Alice (diagnosis) writes records in ASCENDING pid order; within a pid,
+		// the diag order doesn't matter for the algorithm.
+		for (std::uint64_t p = 0; p != input_size; p++) {
+			for (std::uint32_t d = 0; d < K_DIAG; d++) {
+				for (std::uint32_t rep = 0; rep < K_DIAG - d; rep++) {
+					write<std::uint32_t, 4>(garbler_file, static_cast<std::uint32_t>(p));
+					write<std::uint32_t, 4>(garbler_file, d);
+				}
+			}
+		}
+
+		// Expected top-10 output: (diag, count) sorted DESC by count.
+		for (std::uint32_t d = 0; d < K_DIAG; d++) {
+			std::uint32_t count = static_cast<std::uint32_t>(input_size) * (K_DIAG - d);
+			write<std::uint32_t, 4>(expected_file, d);
+			write<std::uint32_t, 4>(expected_file, count);
+		}
 	} else {
 		std::cerr << "Unknown problem " << problem_name << std::endl;
 	}
