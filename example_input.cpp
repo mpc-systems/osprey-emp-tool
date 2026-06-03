@@ -213,6 +213,34 @@ int main(int argc, char** argv) {
 				write<std::uint32_t, 4>(evaluator_file, user);
 			}
 		}
+	} else if (problem_name == "aspirin") {
+		// Layout matches mage/src/programs/aspirin.cpp: each record is
+		// word 0 = timestamp   (low 32 bits of patient_id_concat_timestamp)
+		// word 1 = patient_id  (high 32 bits of patient_id_concat_timestamp)
+		// word 2 = diagnosis   (low bit; rest zero)
+		// Garbler: patients 0..N-1 at ts=1, diag=1 for all except patient 0.
+		// Evaluator: patients N-1..0 at ts=2, all diag=0.
+		// After bitonic_merge (ascending by patient_id_concat_timestamp), each
+		// patient's two events sit adjacent in time order (garbler then evaluator),
+		// so the count of pairs with first.diag=1 & !second.diag & same patient
+		// is exactly input_size - 1.
+		for (std::uint64_t i = 0; i != input_size * 2; i++) {
+			if (i < input_size) {
+				std::uint32_t pid = static_cast<std::uint32_t>(i);
+				std::uint32_t diag = (i == 0) ? 0u : 1u;
+				write<std::uint32_t, 4>(garbler_file, 1);
+				write<std::uint32_t, 4>(garbler_file, pid);
+				write<std::uint32_t, 4>(garbler_file, diag);
+			} else {
+				std::uint32_t pid = static_cast<std::uint32_t>(2 * input_size - i - 1);
+				write<std::uint32_t, 4>(evaluator_file, 2);
+				write<std::uint32_t, 4>(evaluator_file, pid);
+				write<std::uint32_t, 4>(evaluator_file, 0);
+			}
+		}
+		// MAGE also outputs an order-validity bit before the count; we skip it
+		// here because the input format guarantees the bitonic precondition.
+		write<std::uint32_t, 4>(expected_file, static_cast<std::uint32_t>(input_size - 1));
 	} else {
 		std::cerr << "Unknown problem " << problem_name << std::endl;
 	}

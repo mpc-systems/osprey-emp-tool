@@ -116,6 +116,8 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 		}
 	} else if (strcmp(problem_name, "password") == 0) {
 		return problem_size * 9;
+	} else if (strcmp(problem_name, "aspirin") == 0) {
+		return problem_size * 3;
 	} else {
 		std::cerr << "Unknown problem name " << problem_name << std::endl;
 		std::abort();
@@ -266,6 +268,53 @@ void loop_join(int party, std::size_t problem_size, const std::vector<Integer<wi
 }
 
 template <std::size_t width>
+void aspirin(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
+			 std::vector<Integer<width>>& output_data) {
+	static_assert(width % 8 == 0, "Width must be multiple of 8");
+
+	// Record layout matches mage/src/programs/aspirin.cpp:
+	//   word 0: timestamp   (low half of patient_id_concat_timestamp)
+	//   word 1: patient_id  (high half)
+	//   word 2: diagnosis bit (low bit, rest zero)
+	constexpr std::size_t record_words = 3;
+
+	std::vector<Integer<2 * width>> key;
+	std::vector<Integer<width>> diag;
+	key.reserve(input_data.size() / record_words);
+	diag.reserve(input_data.size() / record_words);
+
+	for (std::size_t i = 0; i < input_data.size(); i += record_words) {
+		Integer<2 * width> k;
+		std::memcpy(&(k.bits.data()[0]), input_data[i].bits.data(), width * sizeof(Bit));
+		std::memcpy(&(k.bits.data()[width]), input_data[i + 1].bits.data(), width * sizeof(Bit));
+		key.push_back(k);
+		diag.push_back(input_data[i + 2]);
+	}
+
+	// Alice ascending + Bob descending by patient_id ⇒ concatenated 2N sequence is
+	// bitonic by (patient_id, timestamp); bitonic_merge sorts it ascending. Mirrors
+	// MAGE's "parallel_bitonic_sorter" step in aspirin.cpp:98 (full sort there;
+	// merge here exploits the bitonic input, same as our password port).
+	bitonic_merge(key.data(), diag.data(), 0, key.size(), true);
+
+	// Count adjacent pairs where first.diag=1, second.diag=0, and patient_ids match
+	// (mage/src/programs/aspirin.cpp:101-113). patient_id is the high half of the
+	// 2*width-bit key.
+	Integer<width> count(0, PUBLIC);
+	Integer<width> one(1, PUBLIC);
+	for (std::size_t i = 0; i + 1 < key.size(); i++) {
+		Integer<width> pid_i(static_cast<Bit*>(&(key[i].bits.data()[width])));
+		Integer<width> pid_ip1(static_cast<Bit*>(&(key[i + 1].bits.data()[width])));
+		Bit pid_eq = (pid_i == pid_ip1);
+		Bit hit = diag[i][0] & !diag[i + 1][0] & pid_eq;
+		Integer<width> next = count + one;
+		count = count.select(hit, next);
+	}
+
+	output_data.push_back(count);
+}
+
+template <std::size_t width>
 void password(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
 			  std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
@@ -371,6 +420,8 @@ int main(int argc, char** argv) {
 		matrix_vector_multiply<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else if (strcmp(problem_name, "password") == 0) {
 		password<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
+	} else if (strcmp(problem_name, "aspirin") == 0) {
+		aspirin<width>(party, problem_size, input_data_encrypt, output_data_encrypt);
 	} else {
 		std::cerr << "Unknown problem name" << std::endl;
 		return 1;
