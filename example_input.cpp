@@ -258,7 +258,10 @@ int main(int argc, char** argv) {
 		//     (Alice's diag row at the lower index, Bob's cohort row at the higher),
 		//     unmatched pids form singletons.
 		//
-		// Records are 2 × uint32 (pid, diag) on both sides; cohort diag = 0 placeholder.
+		// Records are 4 × uint32 on both sides: pid as 2 words (low, high) followed by
+		// diag as 2 words (low, high), so pid and diag are stored as 64-bit fields.
+		// Cohort diag = 0 placeholder. Our test pid/diag values all fit in 32 bits,
+		// so the high words are always 0.
 		//
 		// Test data is chosen so the top-10 has unique, predictable counts.
 		// For each cohort patient p, assign a diag with this distribution:
@@ -275,11 +278,11 @@ int main(int argc, char** argv) {
 		//   p ∈ [55, M)  → diag 999 (count  M−55, the long tail)
 		// Top-10 DESC: (999, M−55), (0, 10), (1, 9), ..., (8, 2).
 		// (Diag 9 with count 1 falls just outside the top-10.) Requires M ≥ 56.
-		constexpr std::uint32_t K_DIAG = 1000;
-		constexpr std::uint32_t HIGH_DIAG = K_DIAG - 1;  // 999, the long-tail diag
-		constexpr std::uint32_t DIAGNOSIS_MULTIPLIER = 10;  // N = 10 · M (ORQ ratio)
+		constexpr std::uint64_t K_DIAG = 1000;
+		constexpr std::uint64_t HIGH_DIAG = K_DIAG - 1;  // 999, the long-tail diag
+		constexpr std::uint64_t DIAGNOSIS_MULTIPLIER = 1000;  // N = 1000 · M (ORQ ratio)
 
-		auto matched_diag = [HIGH_DIAG](std::uint32_t p) -> std::uint32_t {
+		auto matched_diag = [HIGH_DIAG](std::uint64_t p) -> std::uint64_t {
 			if (p < 10)  return 0;
 			if (p < 19)  return 1;
 			if (p < 27)  return 2;
@@ -293,35 +296,41 @@ int main(int argc, char** argv) {
 			return HIGH_DIAG;
 		};
 
+		// Helper: write a 64-bit value as 2 uint32 words (low first, then high).
+		auto write_u64 = [](std::ofstream& stream, std::uint64_t value) {
+			write<std::uint32_t, 4>(stream, static_cast<std::uint32_t>(value));
+			write<std::uint32_t, 4>(stream, static_cast<std::uint32_t>(value >> 32));
+		};
+
 		// Bob (cohort) writes M rows: pids M-1 down to 0 (DESCENDING for bitonic concat).
 		for (std::uint64_t i = 0; i != input_size; i++) {
-			std::uint32_t pid = static_cast<std::uint32_t>(input_size - 1 - i);
-			write<std::uint32_t, 4>(evaluator_file, pid);
-			write<std::uint32_t, 4>(evaluator_file, 0);  // diag placeholder
+			std::uint64_t pid = input_size - 1 - i;
+			write_u64(evaluator_file, pid);
+			write_u64(evaluator_file, 0);  // diag placeholder
 		}
 
-		// Alice (diagnosis) writes N = 10·M rows in ASCENDING pid order:
+		// Alice (diagnosis) writes N = 1000·M rows in ASCENDING pid order:
 		//   pids 0..M-1   → matched, real diag = matched_diag(p)
 		//   pids M..N-1   → unmatched, diag = 0 (placeholder, won't pass semi-join)
 		for (std::uint64_t p = 0; p != input_size; p++) {
-			write<std::uint32_t, 4>(garbler_file, static_cast<std::uint32_t>(p));
-			write<std::uint32_t, 4>(garbler_file, matched_diag(static_cast<std::uint32_t>(p)));
+			write_u64(garbler_file, p);
+			write_u64(garbler_file, matched_diag(p));
 		}
 		std::uint64_t unmatched_count = input_size * (DIAGNOSIS_MULTIPLIER - 1);
 		for (std::uint64_t i = 0; i != unmatched_count; i++) {
-			std::uint32_t pid = static_cast<std::uint32_t>(input_size + i);
-			write<std::uint32_t, 4>(garbler_file, pid);
-			write<std::uint32_t, 4>(garbler_file, 0);  // placeholder; won't pass semi-join
+			std::uint64_t pid = input_size + i;
+			write_u64(garbler_file, pid);
+			write_u64(garbler_file, 0);  // placeholder; won't pass semi-join
 		}
 
-		// Expected top-10 output: (diag, count) DESC by count.
+		// Expected top-10 output: (diag, count) DESC by count, each as 2 uint32 words.
 		// Position 1: the long-tail diag with count M−55.
-		write<std::uint32_t, 4>(expected_file, HIGH_DIAG);
-		write<std::uint32_t, 4>(expected_file, static_cast<std::uint32_t>(input_size) - 55u);
+		write_u64(expected_file, HIGH_DIAG);
+		write_u64(expected_file, input_size - 55);
 		// Positions 2..10: diags 0..8 with counts 10, 9, 8, 7, 6, 5, 4, 3, 2.
-		for (std::uint32_t d = 0; d < 9; d++) {
-			write<std::uint32_t, 4>(expected_file, d);
-			write<std::uint32_t, 4>(expected_file, 10u - d);
+		for (std::uint64_t d = 0; d < 9; d++) {
+			write_u64(expected_file, d);
+			write_u64(expected_file, 10 - d);
 		}
 	} else {
 		std::cerr << "Unknown problem " << problem_name << std::endl;

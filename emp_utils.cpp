@@ -119,14 +119,16 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 	} else if (strcmp(problem_name, "aspirin") == 0) {
 		return problem_size * 3;
 	} else if (strcmp(problem_name, "comorbidity") == 0) {
-		// DIAGNOSIS_MULTIPLIER must match example_input.cpp and the comorbidity function.
-		constexpr std::size_t DIAGNOSIS_MULTIPLIER = 10;  // N = 10 · M (ORQ ratio)
+		// DIAGNOSIS_MULTIPLIER and WORDS_PER_RECORD must match example_input.cpp and
+		// the comorbidity function. Each record is pid_64 (2 words) + diag_64 (2 words).
+		constexpr std::size_t DIAGNOSIS_MULTIPLIER = 1000;  // N = 1000 · M (paper ratio)
+		constexpr std::size_t WORDS_PER_RECORD = 4;
 		if (party == ALICE) {
-			// Bob owns the cohort: problem_size records × 2 words (pid, placeholder).
-			return problem_size * 2;
+			// Bob owns the cohort: problem_size records × 4 words.
+			return problem_size * WORDS_PER_RECORD;
 		} else {
-			// Alice owns the diagnosis: N = 10 · problem_size records × 2 words.
-			return problem_size * DIAGNOSIS_MULTIPLIER * 2;
+			// Alice owns the diagnosis: N = 1000 · problem_size records × 4 words.
+			return problem_size * DIAGNOSIS_MULTIPLIER * WORDS_PER_RECORD;
 		}
 	} else {
 		std::cerr << "Unknown problem name " << problem_name << std::endl;
@@ -401,49 +403,58 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	//   7. Top-K selection over (valid, count) composite, carrying diag.
 	//   8. Reveal (diag, count) only — valid bit stays hidden.
 	//
-	// Test-data structural assumptions (validated by example_input.cpp):
-	//   - cohort pids are unique
-	//   - each cohort patient has exactly ONE matching diagnosis row
-	//   - unmatched diagnosis rows have unique pids in a disjoint range
-	//   ⇒ matched pid groups have size 2, unmatched are singletons; R = M.
-	constexpr std::size_t DIAGNOSIS_MULTIPLIER = 10;       // N = 10 · M (ORQ ratio)
+	// Field widths (all 64 bit to match the paper's int64_t model):
+	//   pid, diag, count : 64 bits each. composite : 65 bits (valid in the top bit).
+	// Each record on disk is 4 × uint32 words: pid (low, high) then diag (low, high).
+	constexpr std::size_t DIAGNOSIS_MULTIPLIER = 1000;     // N = 1000 · M (paper ratio)
 	constexpr std::size_t K_TOP = 10;
-	constexpr std::size_t diag_bits = 10;                  // supports K_DIAG up to 1024
-	constexpr std::size_t count_bits = 16;                 // count ≤ M ≤ 2^16
+	constexpr std::size_t pid_bits = 64;
+	constexpr std::size_t diag_bits = 64;
+	constexpr std::size_t count_bits = 64;
 	constexpr std::size_t composite_bits = count_bits + 1; // valid in the top bit
+	constexpr std::size_t words_per_field = pid_bits / width;     // = 64/32 = 2
+	constexpr std::size_t words_per_record = 2 * words_per_field; // pid + diag = 4 words
+
+	static_assert(pid_bits % width == 0, "pid_bits must be a multiple of input word width");
+	static_assert(diag_bits == pid_bits, "this implementation assumes pid_bits == diag_bits");
 
 	const std::size_t M = problem_size;
 	const std::size_t N = problem_size * DIAGNOSIS_MULTIPLIER;
 	const std::size_t total_rows = N + M;
 
 	// input_data layout (from encrypt_file):
-	//   [0, 2·N):           Alice's diagnosis rows (pid, diag) × 2 words each
-	//   [2·N, 2·N + 2·M):   Bob's cohort rows (pid, placeholder) × 2 words each
+	//   [0, words_per_record · N):           Alice's diagnosis rows (pid_64, diag_64)
+	//   [words_per_record · N, ...):         Bob's cohort rows (pid_64, placeholder_64)
 
-	// --- Step 1: unpack inputs into parallel arrays (pid, narrow diag). ---
-	std::vector<Integer<width>> pids;
+	// Helper: read a 64-bit field starting at word index `w` from input_data.
+	auto read_field_64 = [&](std::size_t w) -> Integer<pid_bits> {
+		Integer<pid_bits> result(0, PUBLIC);
+		for (std::size_t k = 0; k < words_per_field; k++) {
+			std::memcpy(&(result.bits.data()[k * width]), input_data[w + k].bits.data(),
+						width * sizeof(Bit));
+		}
+		return result;
+	};
+
+	// --- Step 1: unpack inputs into parallel arrays (pid_64, diag_64). ---
+	std::vector<Integer<pid_bits>> pids;
 	std::vector<Integer<diag_bits>> diags;
 	pids.reserve(total_rows);
 	diags.reserve(total_rows);
 
 	for (std::size_t i = 0; i < N; i++) {
-		pids.push_back(input_data[i * 2]);
-		Integer<diag_bits> d(0, PUBLIC);
-		for (std::size_t b = 0; b < diag_bits; b++) {
-			d[b] = input_data[i * 2 + 1][b];
-		}
-		diags.push_back(d);
+		std::size_t base = i * words_per_record;
+		pids.push_back(read_field_64(base));
+		diags.push_back(read_field_64(base + words_per_field));
 	}
+	const std::size_t bob_start = N * words_per_record;
 	for (std::size_t i = 0; i < M; i++) {
-		pids.push_back(input_data[2 * N + i * 2]);
-		Integer<diag_bits> d(0, PUBLIC);
-		for (std::size_t b = 0; b < diag_bits; b++) {
-			d[b] = input_data[2 * N + i * 2 + 1][b];
-		}
-		diags.push_back(d);
+		std::size_t base = bob_start + i * words_per_record;
+		pids.push_back(read_field_64(base));
+		diags.push_back(read_field_64(base + words_per_field));
 	}
 
-	// --- Step 2: bitonic_merge by pid, carrying diag (10 bits). ---
+	// --- Step 2: bitonic_merge by pid, carrying diag (64 bits). ---
 	// Input is bitonic (Alice ASC, Bob DESC); cmp_swap is stable, so within
 	// any same-pid group Alice's row stays at the lower output index.
 	bitonic_merge(pids.data(), diags.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
@@ -487,7 +498,7 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	// --- Step 7: group-by sweep → count = Σ valid per diag group. ---
 	std::vector<Integer<count_bits>> counts(M, Integer<count_bits>(0, PUBLIC));
 	{
-		Integer<diag_bits> last_diag(static_cast<std::int64_t>((1 << diag_bits) - 1), PUBLIC);
+		Integer<diag_bits> last_diag(-1, PUBLIC);  // all-ones; doesn't match any real diag (≤ K_DIAG-1)
 		Integer<count_bits> running_count(0, PUBLIC);
 		Integer<count_bits> zero_count(0, PUBLIC);
 		for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(M) - 1; i >= 0; i--) {
@@ -517,9 +528,7 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	// high bit so valid=1 rows always outrank valid=0 rows.
 	std::vector<Integer<composite_bits>> composite(M, Integer<composite_bits>(0, PUBLIC));
 	for (std::size_t i = 0; i < M; i++) {
-		for (std::size_t b = 0; b < count_bits; b++) {
-			composite[i][b] = counts[i][b];
-		}
+		std::memcpy(&(composite[i].bits.data()[0]), counts[i].bits.data(), count_bits * sizeof(Bit));
 		composite[i][count_bits] = valids[i];
 	}
 
@@ -538,20 +547,21 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 		}
 	}
 
-	// --- Step 10: output top-K (diag, count) pairs, zero-padded to width bits.
+	// --- Step 10: emit top-K (diag, count) as 2 width-32 words each (low, high).
 	// Valid bit (composite[r][count_bits]) is deliberately NOT included in output. ---
+	auto push_field_64 = [&](const Integer<diag_bits>& value) {
+		for (std::size_t k = 0; k < words_per_field; k++) {
+			Integer<width> w(0, PUBLIC);
+			std::memcpy(w.bits.data(), &(value.bits.data()[k * width]), width * sizeof(Bit));
+			output_data.push_back(w);
+		}
+	};
 	for (std::size_t r = 0; r < K_TOP; r++) {
-		Integer<width> diag_out(0, PUBLIC);
-		for (std::size_t b = 0; b < diag_bits; b++) {
-			diag_out[b] = diags[r][b];
-		}
-		output_data.push_back(diag_out);
-
-		Integer<width> count_out(0, PUBLIC);
-		for (std::size_t b = 0; b < count_bits; b++) {
-			count_out[b] = composite[r][b];
-		}
-		output_data.push_back(count_out);
+		push_field_64(diags[r]);
+		// Extract count from composite (low count_bits) into a fresh Integer<count_bits>.
+		Integer<count_bits> count_only(0, PUBLIC);
+		std::memcpy(count_only.bits.data(), &(composite[r].bits.data()[0]), count_bits * sizeof(Bit));
+		push_field_64(count_only);
 	}
 }
 
