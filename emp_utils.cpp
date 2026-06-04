@@ -119,14 +119,13 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 	} else if (strcmp(problem_name, "aspirin") == 0) {
 		return problem_size * 3;
 	} else if (strcmp(problem_name, "comorbidity") == 0) {
-		// K_DIAG must match example_input.cpp and the comorbidity function.
-		constexpr std::size_t K_DIAG = 10;
-		constexpr std::size_t DIAGNOSIS_MULTIPLIER = K_DIAG * (K_DIAG + 1) / 2;  // 55
+		// DIAGNOSIS_MULTIPLIER must match example_input.cpp and the comorbidity function.
+		constexpr std::size_t DIAGNOSIS_MULTIPLIER = 10;  // N = 10 · M (ORQ ratio)
 		if (party == ALICE) {
 			// Bob owns the cohort: problem_size records × 2 words (pid, placeholder).
 			return problem_size * 2;
 		} else {
-			// Alice owns the diagnosis: problem_size · 55 records × 2 words (pid, diag).
+			// Alice owns the diagnosis: N = 10 · problem_size records × 2 words.
 			return problem_size * DIAGNOSIS_MULTIPLIER * 2;
 		}
 	} else {
@@ -386,153 +385,173 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 				 std::vector<Integer<width>>& output_data) {
 	static_assert(width % 8 == 0, "Width must be multiple of 8");
 
-	// Mirrors orq's comorbidity benchmark:
+	// Path D' — mirrors orq's comorbidity:
 	//   SELECT diag, COUNT(*) FROM diagnosis WHERE pid IN cohort
 	//   GROUP BY diag ORDER BY cnt DESC LIMIT 10
 	//
-	// K_DIAG must match example_input.cpp and get_other_input_size above.
-	constexpr std::size_t K_DIAG = 10;
-	constexpr std::size_t DIAGNOSIS_MULTIPLIER = K_DIAG * (K_DIAG + 1) / 2;  // 55
+	// Pipeline:
+	//   1. bitonic_merge by pid, carry diag (input is bitonic by construction).
+	//   2. valid[i] = (pid[i] == pid[i+1]) — adjacency check; works because
+	//      cmp_swap is stable, so in matched pid groups Alice's diag row (lower
+	//      input index) precedes Bob's cohort row.
+	//   3. Drop pid; sort by valid DESC carrying diag (big sort = compaction).
+	//   4. Truncate to first M rows (no reveal; relies on R ≤ M test-data invariant).
+	//   5. Sort by diag carrying valid (small sort on M rows).
+	//   6. Group-by sweep: count[i] at first-of-group = Σ valid in group.
+	//   7. Top-K selection over (valid, count) composite, carrying diag.
+	//   8. Reveal (diag, count) only — valid bit stays hidden.
+	//
+	// Test-data structural assumptions (validated by example_input.cpp):
+	//   - cohort pids are unique
+	//   - each cohort patient has exactly ONE matching diagnosis row
+	//   - unmatched diagnosis rows have unique pids in a disjoint range
+	//   ⇒ matched pid groups have size 2, unmatched are singletons; R = M.
+	constexpr std::size_t DIAGNOSIS_MULTIPLIER = 10;       // N = 10 · M (ORQ ratio)
 	constexpr std::size_t K_TOP = 10;
+	constexpr std::size_t diag_bits = 10;                  // supports K_DIAG up to 1024
+	constexpr std::size_t count_bits = 16;                 // count ≤ M ≤ 2^16
+	constexpr std::size_t composite_bits = count_bits + 1; // valid in the top bit
 
-	const std::size_t M = problem_size;                          // cohort size
-	const std::size_t N = problem_size * DIAGNOSIS_MULTIPLIER;   // diagnosis size
+	const std::size_t M = problem_size;
+	const std::size_t N = problem_size * DIAGNOSIS_MULTIPLIER;
 	const std::size_t total_rows = N + M;
 
-	// input_data layout (produced by encrypt_file):
-	//   [0,         2*N):     Alice's diagnosis rows (pid, diag) × 2 words each
-	//   [2*N, 2*N + 2*M):     Bob's cohort rows (pid, 0_placeholder) × 2 words each
+	// input_data layout (from encrypt_file):
+	//   [0, 2·N):           Alice's diagnosis rows (pid, diag) × 2 words each
+	//   [2·N, 2·N + 2·M):   Bob's cohort rows (pid, placeholder) × 2 words each
 
-	// Step 1: Unpack into parallel arrays (pid, packed=(diag,tid)).
-	// packed = diag in bits [0, width), tid in bit width. Width+1 bits total.
+	// --- Step 1: unpack inputs into parallel arrays (pid, narrow diag). ---
 	std::vector<Integer<width>> pids;
-	std::vector<Integer<width + 1>> packed;
+	std::vector<Integer<diag_bits>> diags;
 	pids.reserve(total_rows);
-	packed.reserve(total_rows);
+	diags.reserve(total_rows);
 
 	for (std::size_t i = 0; i < N; i++) {
 		pids.push_back(input_data[i * 2]);
-		Integer<width + 1> p(0, PUBLIC);
-		for (std::size_t b = 0; b < width; b++) {
-			p[b] = input_data[i * 2 + 1][b];
+		Integer<diag_bits> d(0, PUBLIC);
+		for (std::size_t b = 0; b < diag_bits; b++) {
+			d[b] = input_data[i * 2 + 1][b];
 		}
-		p[width] = Bit(false, PUBLIC);  // tid = 0 for diagnosis
-		packed.push_back(p);
+		diags.push_back(d);
 	}
 	for (std::size_t i = 0; i < M; i++) {
 		pids.push_back(input_data[2 * N + i * 2]);
-		Integer<width + 1> p(0, PUBLIC);
-		// diag bits already 0 from the constructor; nothing to set.
-		p[width] = Bit(true, PUBLIC);  // tid = 1 for cohort
-		packed.push_back(p);
-	}
-
-	// Step 2: bitonic_merge by pid ASC, carrying packed=(diag,tid).
-	// Concatenated input is bitonic by pid (Alice ASC, Bob DESC — see example_input.cpp).
-	bitonic_merge(pids.data(), packed.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
-
-	// Step 3: Semi-join sweep. For each row, set valid[i] iff this row is
-	// a diagnosis row (tid=0) AND its pid group contains a cohort row (tid=1).
-	// "pid group contains cohort" requires propagating tid bits across all rows
-	// of the same pid; we do this with a forward + backward scan over the sorted array.
-	std::vector<Bit> tids(total_rows);
-	for (std::size_t i = 0; i < total_rows; i++) {
-		tids[i] = packed[i][width];
-	}
-
-	std::vector<Bit> forward_has(total_rows);
-	{
-		Integer<width> fwd_pid(-1, PUBLIC);  // sentinel: all-ones; won't match any real pid
-		Bit fwd_has(false, PUBLIC);
-		Bit zero_bit(false, PUBLIC);
-		for (std::size_t i = 0; i < total_rows; i++) {
-			Bit new_group = (pids[i] != fwd_pid);
-			fwd_has = fwd_has.select(new_group, zero_bit);  // reset on new group
-			fwd_has = fwd_has | tids[i];
-			fwd_pid = pids[i];
-			forward_has[i] = fwd_has;
+		Integer<diag_bits> d(0, PUBLIC);
+		for (std::size_t b = 0; b < diag_bits; b++) {
+			d[b] = input_data[2 * N + i * 2 + 1][b];
 		}
+		diags.push_back(d);
 	}
 
-	std::vector<Bit> backward_has(total_rows);
-	{
-		Integer<width> bwd_pid(-1, PUBLIC);
-		Bit bwd_has(false, PUBLIC);
-		Bit zero_bit(false, PUBLIC);
-		for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(total_rows) - 1; i >= 0; i--) {
-			Bit new_group = (pids[i] != bwd_pid);
-			bwd_has = bwd_has.select(new_group, zero_bit);
-			bwd_has = bwd_has | tids[i];
-			bwd_pid = pids[i];
-			backward_has[i] = bwd_has;
-		}
-	}
+	// --- Step 2: bitonic_merge by pid, carrying diag (10 bits). ---
+	// Input is bitonic (Alice ASC, Bob DESC); cmp_swap is stable, so within
+	// any same-pid group Alice's row stays at the lower output index.
+	bitonic_merge(pids.data(), diags.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
 
+	// --- Step 3: adjacency sweep → set valid. ---
+	// In matched groups (size 2): Alice diag at i, Bob cohort at i+1; pid[i]==pid[i+1].
+	// In singletons: pid[i]!=pid[i+1].
 	std::vector<Bit> valids(total_rows);
-	std::vector<Integer<width>> diags(total_rows);
-	for (std::size_t i = 0; i < total_rows; i++) {
-		valids[i] = (!tids[i]) & (forward_has[i] | backward_has[i]);
-		// Project out pid and tid; only diag (and valid) are needed downstream.
-		for (std::size_t b = 0; b < width; b++) {
-			diags[i][b] = packed[i][b];
-		}
+	for (std::size_t i = 0; i + 1 < total_rows; i++) {
+		valids[i] = (pids[i] == pids[i + 1]);
 	}
+	valids[total_rows - 1] = Bit(false, PUBLIC);
 
-	// Step 4: bitonic_sort by diag ASC, carrying valid. Input is NOT bitonic
-	// (it was sorted by pid, not diag), so we need a full sort.
-	bitonic_sort(diags.data(), valids.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
+	// pids are no longer needed.
+	pids.clear();
+	pids.shrink_to_fit();
 
-	// Step 5: Group-by sweep. After sort, rows with the same diag are contiguous.
-	// Backward pass: running_count[i] = sum of valid bits from i to end-of-group.
-	// At the first row of each group, running_count = total group count.
-	std::vector<Integer<width>> counts(total_rows);
+	// --- Step 4: sort by valid DESC, carrying diag. ---
+	// emp-tool's cmp_swap needs `key[i] > key[j]`, which Bit doesn't provide;
+	// wrap valids into Integer<1> for the duration of this sort, then unpack.
+	std::vector<Integer<1>> valids_key(total_rows, Integer<1>(0, PUBLIC));
+	for (std::size_t i = 0; i < total_rows; i++) {
+		valids_key[i][0] = valids[i];
+	}
+	// acc=false → DESCENDING sort, so valid=1 rows land first.
+	bitonic_sort(valids_key.data(), diags.data(), 0, static_cast<int>(total_rows), Bit(false, PUBLIC));
+	for (std::size_t i = 0; i < total_rows; i++) {
+		valids[i] = valids_key[i][0];
+	}
+	valids_key.clear();
+	valids_key.shrink_to_fit();
+
+	// --- Step 5: truncate to first M rows (no reveal of R). ---
+	// Test-data invariant: R = M, so all first-M rows are valid.
+	diags.resize(M);
+	valids.resize(M);
+
+	// --- Step 6: sort by diag ASC, carrying valid. ---
+	bitonic_sort(diags.data(), valids.data(), 0, static_cast<int>(M), Bit(true, PUBLIC));
+
+	// --- Step 7: group-by sweep → count = Σ valid per diag group. ---
+	std::vector<Integer<count_bits>> counts(M, Integer<count_bits>(0, PUBLIC));
 	{
-		Integer<width> last_diag(-1, PUBLIC);
-		Integer<width> running_count(0, PUBLIC);
-		for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(total_rows) - 1; i >= 0; i--) {
+		Integer<diag_bits> last_diag(static_cast<std::int64_t>((1 << diag_bits) - 1), PUBLIC);
+		Integer<count_bits> running_count(0, PUBLIC);
+		Integer<count_bits> zero_count(0, PUBLIC);
+		for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(M) - 1; i >= 0; i--) {
 			Bit same_diag = (diags[i] == last_diag);
-			Integer<width> valid_int(0, PUBLIC);
-			valid_int[0] = valids[i];
-			Integer<width> accumulated = running_count + valid_int;
-			// running_count = same_diag ? accumulated : valid_int (reset on new group)
-			running_count = valid_int.select(same_diag, accumulated);
+			Integer<count_bits> v(0, PUBLIC);
+			v[0] = valids[i];
+			// running = (same_diag ? running : 0) + v
+			Integer<count_bits> base = zero_count.select(same_diag, running_count);
+			running_count = base + v;
 			last_diag = diags[i];
 			counts[i] = running_count;
 		}
 	}
 
-	// Mask counts: keep them only at the first row of each group; zero elsewhere.
-	// This ensures top-K selection picks one representative per group.
+	// Mask: keep count only at first-of-group rows (i.e., where diag changes from i-1).
 	{
-		Integer<width> zero_int(0, PUBLIC);
-		for (std::size_t i = 1; i < total_rows; i++) {
+		Integer<count_bits> zero_count(0, PUBLIC);
+		for (std::size_t i = 1; i < M; i++) {
 			Bit is_first = (diags[i] != diags[i - 1]);
-			counts[i] = zero_int.select(is_first, counts[i]);
+			counts[i] = zero_count.select(is_first, counts[i]);
 		}
-		// counts[0] is always at a group boundary (no predecessor) — keep as is.
+		// counts[0] is always first-of-group (no predecessor).
 	}
 
-	// Step 6: Top-K selection via bubble-style network. K = K_TOP = 10.
-	// After K passes, positions [0, K) hold the K largest counts (DESC),
-	// with their associated diag values. No full sort needed.
-	for (std::size_t r = 0; r < K_TOP && r < total_rows; r++) {
-		for (std::size_t j = total_rows - 1; j > r; j--) {
-			Bit swap_it = counts[j] > counts[j - 1];
-			Integer<width> ca = counts[j - 1];
-			Integer<width> cb = counts[j];
-			counts[j - 1] = ca.select(swap_it, cb);
-			counts[j] = cb.select(swap_it, ca);
-			Integer<width> da = diags[j - 1];
-			Integer<width> db = diags[j];
+	// --- Step 8: build composite (valid << count_bits) | count for top-K. ---
+	// Composite is treated as a single (count_bits + 1)-bit integer; valid is the
+	// high bit so valid=1 rows always outrank valid=0 rows.
+	std::vector<Integer<composite_bits>> composite(M, Integer<composite_bits>(0, PUBLIC));
+	for (std::size_t i = 0; i < M; i++) {
+		for (std::size_t b = 0; b < count_bits; b++) {
+			composite[i][b] = counts[i][b];
+		}
+		composite[i][count_bits] = valids[i];
+	}
+
+	// --- Step 9: top-K_TOP selection by composite DESC, carrying diag. ---
+	for (std::size_t r = 0; r < K_TOP && r < M; r++) {
+		for (std::size_t j = M - 1; j > r; j--) {
+			Bit swap_it = composite[j] > composite[j - 1];
+			Integer<composite_bits> ca = composite[j - 1];
+			Integer<composite_bits> cb = composite[j];
+			composite[j - 1] = ca.select(swap_it, cb);
+			composite[j] = cb.select(swap_it, ca);
+			Integer<diag_bits> da = diags[j - 1];
+			Integer<diag_bits> db = diags[j];
 			diags[j - 1] = da.select(swap_it, db);
 			diags[j] = db.select(swap_it, da);
 		}
 	}
 
-	// Output top-K_TOP (diag, count) pairs.
+	// --- Step 10: output top-K (diag, count) pairs, zero-padded to width bits.
+	// Valid bit (composite[r][count_bits]) is deliberately NOT included in output. ---
 	for (std::size_t r = 0; r < K_TOP; r++) {
-		output_data.push_back(diags[r]);
-		output_data.push_back(counts[r]);
+		Integer<width> diag_out(0, PUBLIC);
+		for (std::size_t b = 0; b < diag_bits; b++) {
+			diag_out[b] = diags[r][b];
+		}
+		output_data.push_back(diag_out);
+
+		Integer<width> count_out(0, PUBLIC);
+		for (std::size_t b = 0; b < count_bits; b++) {
+			count_out[b] = composite[r][b];
+		}
+		output_data.push_back(count_out);
 	}
 }
 

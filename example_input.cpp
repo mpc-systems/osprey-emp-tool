@@ -248,43 +248,80 @@ int main(int argc, char** argv) {
 		//
 		// Threat model: Alice (garbler) holds the diagnosis table {pid, diag};
 		// Bob (evaluator) holds the cohort table {pid}. Both learn the top-10
-		// (diag, count) pairs.
+		// (diag, count) pairs. K_DIAG is a public constant (e.g., ICD-10 codes).
 		//
-		// K_DIAG must match emp_utils.cpp::comorbidity. Records are 2 × uint32
-		// (pid, diag) for both parties; cohort rows use diag = 0 as a placeholder.
+		// Path D' structural assumptions (no tid signal; merge-stability instead):
+		//   - cohort pids are unique
+		//   - each cohort patient has EXACTLY ONE matching diagnosis row
+		//   - unmatched diagnosis rows use pids from a disjoint range (unique)
+		//   ⇒ in the merged-by-pid concat, matched pids form groups of size 2
+		//     (Alice's diag row at the lower index, Bob's cohort row at the higher),
+		//     unmatched pids form singletons.
 		//
-		// Test data is chosen so the top-10 has unique, predictable counts:
-		//   - Cohort: patients 0..M-1 (so every diagnosis row passes the semi-join).
-		//   - Diagnosis: for each (p, d) with p ∈ [0, M) and d ∈ [0, K_DIAG),
-		//     include (K_DIAG − d) records of (pid=p, diag=d).
-		//   - Result: count[d] = M · (K_DIAG − d), giving top-10
-		//     (0, M·K_DIAG), (1, M·(K_DIAG−1)), ..., (K_DIAG−1, M).
-		constexpr std::uint32_t K_DIAG = 10;
+		// Records are 2 × uint32 (pid, diag) on both sides; cohort diag = 0 placeholder.
+		//
+		// Test data is chosen so the top-10 has unique, predictable counts.
+		// For each cohort patient p, assign a diag with this distribution:
+		//   p ∈ [0,10)   → diag 0   (count 10)
+		//   p ∈ [10,19)  → diag 1   (count  9)
+		//   p ∈ [19,27)  → diag 2   (count  8)
+		//   p ∈ [27,34)  → diag 3   (count  7)
+		//   p ∈ [34,40)  → diag 4   (count  6)
+		//   p ∈ [40,45)  → diag 5   (count  5)
+		//   p ∈ [45,49)  → diag 6   (count  4)
+		//   p ∈ [49,52)  → diag 7   (count  3)
+		//   p ∈ [52,54)  → diag 8   (count  2)
+		//   p = 54       → diag 9   (count  1)
+		//   p ∈ [55, M)  → diag 999 (count  M−55, the long tail)
+		// Top-10 DESC: (999, M−55), (0, 10), (1, 9), ..., (8, 2).
+		// (Diag 9 with count 1 falls just outside the top-10.) Requires M ≥ 56.
+		constexpr std::uint32_t K_DIAG = 1000;
+		constexpr std::uint32_t HIGH_DIAG = K_DIAG - 1;  // 999, the long-tail diag
+		constexpr std::uint32_t DIAGNOSIS_MULTIPLIER = 10;  // N = 10 · M (ORQ ratio)
 
-		// Bob (cohort) writes pids in DESCENDING order so the concatenated
-		// cohort+diagnosis array is bitonic by pid.
+		auto matched_diag = [HIGH_DIAG](std::uint32_t p) -> std::uint32_t {
+			if (p < 10)  return 0;
+			if (p < 19)  return 1;
+			if (p < 27)  return 2;
+			if (p < 34)  return 3;
+			if (p < 40)  return 4;
+			if (p < 45)  return 5;
+			if (p < 49)  return 6;
+			if (p < 52)  return 7;
+			if (p < 54)  return 8;
+			if (p < 55)  return 9;
+			return HIGH_DIAG;
+		};
+
+		// Bob (cohort) writes M rows: pids M-1 down to 0 (DESCENDING for bitonic concat).
 		for (std::uint64_t i = 0; i != input_size; i++) {
 			std::uint32_t pid = static_cast<std::uint32_t>(input_size - 1 - i);
 			write<std::uint32_t, 4>(evaluator_file, pid);
 			write<std::uint32_t, 4>(evaluator_file, 0);  // diag placeholder
 		}
 
-		// Alice (diagnosis) writes records in ASCENDING pid order; within a pid,
-		// the diag order doesn't matter for the algorithm.
+		// Alice (diagnosis) writes N = 10·M rows in ASCENDING pid order:
+		//   pids 0..M-1   → matched, real diag = matched_diag(p)
+		//   pids M..N-1   → unmatched, diag = 0 (placeholder, won't pass semi-join)
 		for (std::uint64_t p = 0; p != input_size; p++) {
-			for (std::uint32_t d = 0; d < K_DIAG; d++) {
-				for (std::uint32_t rep = 0; rep < K_DIAG - d; rep++) {
-					write<std::uint32_t, 4>(garbler_file, static_cast<std::uint32_t>(p));
-					write<std::uint32_t, 4>(garbler_file, d);
-				}
-			}
+			write<std::uint32_t, 4>(garbler_file, static_cast<std::uint32_t>(p));
+			write<std::uint32_t, 4>(garbler_file, matched_diag(static_cast<std::uint32_t>(p)));
+		}
+		std::uint64_t unmatched_count = input_size * (DIAGNOSIS_MULTIPLIER - 1);
+		for (std::uint64_t i = 0; i != unmatched_count; i++) {
+			std::uint32_t pid = static_cast<std::uint32_t>(input_size + i);
+			write<std::uint32_t, 4>(garbler_file, pid);
+			write<std::uint32_t, 4>(garbler_file, 0);  // placeholder; won't pass semi-join
 		}
 
-		// Expected top-10 output: (diag, count) sorted DESC by count.
-		for (std::uint32_t d = 0; d < K_DIAG; d++) {
-			std::uint32_t count = static_cast<std::uint32_t>(input_size) * (K_DIAG - d);
+		// Expected top-10 output: (diag, count) DESC by count.
+		// Position 1: the long-tail diag with count M−55.
+		write<std::uint32_t, 4>(expected_file, HIGH_DIAG);
+		write<std::uint32_t, 4>(expected_file, static_cast<std::uint32_t>(input_size) - 55u);
+		// Positions 2..10: diags 0..8 with counts 10, 9, 8, 7, 6, 5, 4, 3, 2.
+		for (std::uint32_t d = 0; d < 9; d++) {
 			write<std::uint32_t, 4>(expected_file, d);
-			write<std::uint32_t, 4>(expected_file, count);
+			write<std::uint32_t, 4>(expected_file, 10u - d);
 		}
 	} else {
 		std::cerr << "Unknown problem " << problem_name << std::endl;
