@@ -258,10 +258,10 @@ int main(int argc, char** argv) {
 		//     (Alice's diag row at the lower index, Bob's cohort row at the higher),
 		//     unmatched pids form singletons.
 		//
-		// Records are 4 × uint32 on both sides: pid as 2 words (low, high) followed by
-		// diag as 2 words (low, high), so pid and diag are stored as 64-bit fields.
-		// Cohort diag = 0 placeholder. Our test pid/diag values all fit in 32 bits,
-		// so the high words are always 0.
+		// Records are 3 × uint32 on both sides: pid as 2 words (low, high) for a
+		// 64-bit pid, then diag as 1 word for a 10-bit diag value (K_DIAG ≤ 1024,
+		// so the upper 22 bits of the diag word are always 0).
+		// Cohort diag = 0 placeholder.
 		//
 		// Test data is chosen so the top-10 has unique, predictable counts.
 		// For each cohort patient p, assign a diag with this distribution:
@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
 		for (std::uint64_t i = 0; i != input_size; i++) {
 			std::uint64_t pid = input_size - 1 - i;
 			write_u64(evaluator_file, pid);
-			write_u64(evaluator_file, 0);  // diag placeholder
+			write<std::uint32_t, 4>(evaluator_file, 0);  // diag placeholder (1 word)
 		}
 
 		// Alice (diagnosis) writes N = 1000·M rows in ASCENDING pid order:
@@ -314,22 +314,22 @@ int main(int argc, char** argv) {
 		//   pids M..N-1   → unmatched, diag = 0 (placeholder, won't pass semi-join)
 		for (std::uint64_t p = 0; p != input_size; p++) {
 			write_u64(garbler_file, p);
-			write_u64(garbler_file, matched_diag(p));
+			write<std::uint32_t, 4>(garbler_file, static_cast<std::uint32_t>(matched_diag(p)));
 		}
 		std::uint64_t unmatched_count = input_size * (DIAGNOSIS_MULTIPLIER - 1);
 		for (std::uint64_t i = 0; i != unmatched_count; i++) {
 			std::uint64_t pid = input_size + i;
 			write_u64(garbler_file, pid);
-			write_u64(garbler_file, 0);  // placeholder; won't pass semi-join
+			write<std::uint32_t, 4>(garbler_file, 0);  // placeholder; won't pass semi-join
 		}
 
-		// Expected top-10 output: (diag, count) DESC by count, each as 2 uint32 words.
+		// Expected top-10 output: each pair is diag (1 word) + count (2 words).
 		// Position 1: the long-tail diag with count M−55.
-		write_u64(expected_file, HIGH_DIAG);
+		write<std::uint32_t, 4>(expected_file, static_cast<std::uint32_t>(HIGH_DIAG));
 		write_u64(expected_file, input_size - 55);
 		// Positions 2..10: diags 0..8 with counts 10, 9, 8, 7, 6, 5, 4, 3, 2.
 		for (std::uint64_t d = 0; d < 9; d++) {
-			write_u64(expected_file, d);
+			write<std::uint32_t, 4>(expected_file, static_cast<std::uint32_t>(d));
 			write_u64(expected_file, 10 - d);
 		}
 	} else {

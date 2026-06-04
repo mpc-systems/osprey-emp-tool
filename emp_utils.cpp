@@ -120,9 +120,9 @@ std::size_t get_other_input_size(int party, char* problem_name, std::size_t prob
 		return problem_size * 3;
 	} else if (strcmp(problem_name, "comorbidity") == 0) {
 		// DIAGNOSIS_MULTIPLIER and WORDS_PER_RECORD must match example_input.cpp and
-		// the comorbidity function. Each record is pid_64 (2 words) + diag_64 (2 words).
+		// the comorbidity function. Each record is pid_64 (2 words) + diag_10 (1 word).
 		constexpr std::size_t DIAGNOSIS_MULTIPLIER = 1000;  // N = 1000 · M (paper ratio)
-		constexpr std::size_t WORDS_PER_RECORD = 4;
+		constexpr std::size_t WORDS_PER_RECORD = 3;
 		if (party == ALICE) {
 			// Bob owns the cohort: problem_size records × 4 words.
 			return problem_size * WORDS_PER_RECORD;
@@ -382,6 +382,66 @@ void matrix_vector_multiply(int party, std::size_t problem_size, const std::vect
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Custom 0/1-key bitonic sort for the comorbidity compaction step.
+//
+// For a 0/1 key, "swap on b" (the value at the higher-index position) realises
+// a correct DESC max/min comparator without any AND for control derivation:
+//
+//   a | b | ctrl=b → swap? | out_i | out_j  ↔ max(a,b), min(a,b)
+//   0 | 0 |       no       |   a=0 |   b=0   ✓
+//   0 | 1 |       yes      |   b=1 |   a=0   ✓
+//   1 | 0 |       no       |   a=1 |   b=0   ✓
+//   1 | 1 |       yes      |   b=1 |   a=1   ✓
+//
+// Symmetrically, "swap on a" gives ASC. Per cmp_swap on (1-bit key + W-bit data):
+// 1 + W ANDs total (no AND for the control, just XORs to apply it).
+// ---------------------------------------------------------------------------
+inline int comorbidity_gpwr2_less(int n) {
+	int k = 1;
+	while (k < n) k <<= 1;
+	return k >> 1;
+}
+
+template <std::size_t diag_bits>
+inline void comorbidity_cmp_swap_valid(Bit* valids, Integer<diag_bits>* diags, int i, int j, bool desc) {
+	Bit ctrl = desc ? valids[j] : valids[i];
+	// Conditional swap of the 1-bit key.
+	Bit delta_v = valids[i] ^ valids[j];
+	Bit and_v = ctrl & delta_v;  // 1 AND
+	valids[i] = valids[i] ^ and_v;
+	valids[j] = valids[j] ^ and_v;
+	// Conditional swap of the diag data (one AND per bit, reusing ctrl).
+	for (std::size_t b = 0; b < diag_bits; b++) {
+		Bit delta_d = diags[i][b] ^ diags[j][b];
+		Bit and_d = ctrl & delta_d;
+		diags[i][b] = diags[i][b] ^ and_d;
+		diags[j][b] = diags[j][b] ^ and_d;
+	}
+}
+
+template <std::size_t diag_bits>
+void comorbidity_bitonic_merge_valid(Bit* valids, Integer<diag_bits>* diags, int lo, int n, bool desc) {
+	if (n > 1) {
+		int m = comorbidity_gpwr2_less(n);
+		for (int i = lo; i < lo + n - m; i++) {
+			comorbidity_cmp_swap_valid(valids, diags, i, i + m, desc);
+		}
+		comorbidity_bitonic_merge_valid(valids, diags, lo, m, desc);
+		comorbidity_bitonic_merge_valid(valids, diags, lo + m, n - m, desc);
+	}
+}
+
+template <std::size_t diag_bits>
+void comorbidity_bitonic_sort_valid(Bit* valids, Integer<diag_bits>* diags, int lo, int n, bool desc) {
+	if (n > 1) {
+		int m = n / 2;
+		comorbidity_bitonic_sort_valid(valids, diags, lo, m, !desc);
+		comorbidity_bitonic_sort_valid(valids, diags, lo + m, n - m, desc);
+		comorbidity_bitonic_merge_valid(valids, diags, lo, n, desc);
+	}
+}
+
 template <std::size_t width>
 void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<width>>& input_data,
 				 std::vector<Integer<width>>& output_data) {
@@ -403,58 +463,74 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	//   7. Top-K selection over (valid, count) composite, carrying diag.
 	//   8. Reveal (diag, count) only — valid bit stays hidden.
 	//
-	// Field widths (all 64 bit to match the paper's int64_t model):
-	//   pid, diag, count : 64 bits each. composite : 65 bits (valid in the top bit).
-	// Each record on disk is 4 × uint32 words: pid (low, high) then diag (low, high).
+	// Field widths:
+	//   pid: 64 bits (paper's int64_t model)
+	//   diag: 10 bits (K_DIAG ≤ 1024 → fits in 1 word; not padded to 64)
+	//   count: 64 bits
+	//   composite: 65 bits (valid in the top bit + 64-bit count)
+	// Each record on disk is 3 × uint32 words: pid (low, high) then diag (1 word).
 	constexpr std::size_t DIAGNOSIS_MULTIPLIER = 1000;     // N = 1000 · M (paper ratio)
 	constexpr std::size_t K_TOP = 10;
 	constexpr std::size_t pid_bits = 64;
-	constexpr std::size_t diag_bits = 64;
+	constexpr std::size_t diag_bits = 10;
 	constexpr std::size_t count_bits = 64;
 	constexpr std::size_t composite_bits = count_bits + 1; // valid in the top bit
-	constexpr std::size_t words_per_field = pid_bits / width;     // = 64/32 = 2
-	constexpr std::size_t words_per_record = 2 * words_per_field; // pid + diag = 4 words
+	constexpr std::size_t pid_words = pid_bits / width;            // = 64/32 = 2
+	constexpr std::size_t diag_words = 1;                          // 10 bits fits in 1 word
+	constexpr std::size_t words_per_record = pid_words + diag_words; // 3
 
 	static_assert(pid_bits % width == 0, "pid_bits must be a multiple of input word width");
-	static_assert(diag_bits == pid_bits, "this implementation assumes pid_bits == diag_bits");
+	static_assert(diag_bits <= width, "diag_bits must fit in a single input word");
 
 	const std::size_t M = problem_size;
 	const std::size_t N = problem_size * DIAGNOSIS_MULTIPLIER;
 	const std::size_t total_rows = N + M;
 
 	// input_data layout (from encrypt_file):
-	//   [0, words_per_record · N):           Alice's diagnosis rows (pid_64, diag_64)
-	//   [words_per_record · N, ...):         Bob's cohort rows (pid_64, placeholder_64)
+	//   [0, words_per_record · N):           Alice's diagnosis rows (pid_64, diag_10)
+	//   [words_per_record · N, ...):         Bob's cohort rows (pid_64, placeholder)
 
-	// Helper: read a 64-bit field starting at word index `w` from input_data.
-	auto read_field_64 = [&](std::size_t w) -> Integer<pid_bits> {
+	// Helper: read a 64-bit pid from 2 consecutive input words.
+	auto read_pid_64 = [&](std::size_t w) -> Integer<pid_bits> {
 		Integer<pid_bits> result(0, PUBLIC);
-		for (std::size_t k = 0; k < words_per_field; k++) {
+		for (std::size_t k = 0; k < pid_words; k++) {
 			std::memcpy(&(result.bits.data()[k * width]), input_data[w + k].bits.data(),
 						width * sizeof(Bit));
 		}
 		return result;
 	};
 
-	// --- Step 1: unpack inputs into parallel arrays (pid_64, diag_64). ---
+	// Helper: read a 10-bit diag from the low bits of a single input word.
+	auto read_diag_10 = [&](std::size_t w) -> Integer<diag_bits> {
+		Integer<diag_bits> result(0, PUBLIC);
+		for (std::size_t b = 0; b < diag_bits; b++) {
+			result[b] = input_data[w][b];
+		}
+		return result;
+	};
+
+	// --- Step 1: unpack inputs into parallel arrays (pid_64, diag_10). ---
 	std::vector<Integer<pid_bits>> pids;
 	std::vector<Integer<diag_bits>> diags;
+	std::vector<Bit> valids(total_rows);
+	std::vector<Integer<count_bits>> counts(M, Integer<count_bits>(0, PUBLIC));
+	std::vector<Integer<composite_bits>> composite(M, Integer<composite_bits>(0, PUBLIC));
 	pids.reserve(total_rows);
 	diags.reserve(total_rows);
 
 	for (std::size_t i = 0; i < N; i++) {
 		std::size_t base = i * words_per_record;
-		pids.push_back(read_field_64(base));
-		diags.push_back(read_field_64(base + words_per_field));
+		pids.push_back(read_pid_64(base));
+		diags.push_back(read_diag_10(base + pid_words));
 	}
 	const std::size_t bob_start = N * words_per_record;
 	for (std::size_t i = 0; i < M; i++) {
 		std::size_t base = bob_start + i * words_per_record;
-		pids.push_back(read_field_64(base));
-		diags.push_back(read_field_64(base + words_per_field));
+		pids.push_back(read_pid_64(base));
+		diags.push_back(read_diag_10(base + pid_words));
 	}
 
-	// --- Step 2: bitonic_merge by pid, carrying diag (64 bits). ---
+	// --- Step 2: bitonic_merge by pid, carrying diag (10 bits). ---
 	// Input is bitonic (Alice ASC, Bob DESC); cmp_swap is stable, so within
 	// any same-pid group Alice's row stays at the lower output index.
 	bitonic_merge(pids.data(), diags.data(), 0, static_cast<int>(total_rows), Bit(true, PUBLIC));
@@ -462,7 +538,6 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	// --- Step 3: adjacency sweep → set valid. ---
 	// In matched groups (size 2): Alice diag at i, Bob cohort at i+1; pid[i]==pid[i+1].
 	// In singletons: pid[i]!=pid[i+1].
-	std::vector<Bit> valids(total_rows);
 	for (std::size_t i = 0; i + 1 < total_rows; i++) {
 		valids[i] = (pids[i] == pids[i + 1]);
 	}
@@ -472,20 +547,12 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	pids.clear();
 	pids.shrink_to_fit();
 
-	// --- Step 4: sort by valid DESC, carrying diag. ---
-	// emp-tool's cmp_swap needs `key[i] > key[j]`, which Bit doesn't provide;
-	// wrap valids into Integer<1> for the duration of this sort, then unpack.
-	std::vector<Integer<1>> valids_key(total_rows, Integer<1>(0, PUBLIC));
-	for (std::size_t i = 0; i < total_rows; i++) {
-		valids_key[i][0] = valids[i];
-	}
-	// acc=false → DESCENDING sort, so valid=1 rows land first.
-	bitonic_sort(valids_key.data(), diags.data(), 0, static_cast<int>(total_rows), Bit(false, PUBLIC));
-	for (std::size_t i = 0; i < total_rows; i++) {
-		valids[i] = valids_key[i][0];
-	}
-	valids_key.clear();
-	valids_key.shrink_to_fit();
+	// --- Step 4: sort by valid DESC, carrying diag — custom b-as-control sort. ---
+	// 0 ANDs to derive the swap control (just reuse valids[j] as a wire); only
+	// the diag swap (diag_bits ANDs per cmp_swap) and the valid swap (1 AND)
+	// cost anything. Net per cmp_swap: 1 + diag_bits = 11 ANDs.
+	comorbidity_bitonic_sort_valid<diag_bits>(valids.data(), diags.data(), 0,
+											  static_cast<int>(total_rows), /*desc=*/true);
 
 	// --- Step 5: truncate to first M rows (no reveal of R). ---
 	// Test-data invariant: R = M, so all first-M rows are valid.
@@ -496,7 +563,6 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	bitonic_sort(diags.data(), valids.data(), 0, static_cast<int>(M), Bit(true, PUBLIC));
 
 	// --- Step 7: group-by sweep → count = Σ valid per diag group. ---
-	std::vector<Integer<count_bits>> counts(M, Integer<count_bits>(0, PUBLIC));
 	{
 		Integer<diag_bits> last_diag(-1, PUBLIC);  // all-ones; doesn't match any real diag (≤ K_DIAG-1)
 		Integer<count_bits> running_count(0, PUBLIC);
@@ -526,7 +592,6 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 	// --- Step 8: build composite (valid << count_bits) | count for top-K. ---
 	// Composite is treated as a single (count_bits + 1)-bit integer; valid is the
 	// high bit so valid=1 rows always outrank valid=0 rows.
-	std::vector<Integer<composite_bits>> composite(M, Integer<composite_bits>(0, PUBLIC));
 	for (std::size_t i = 0; i < M; i++) {
 		std::memcpy(&(composite[i].bits.data()[0]), counts[i].bits.data(), count_bits * sizeof(Bit));
 		composite[i][count_bits] = valids[i];
@@ -547,21 +612,22 @@ void comorbidity(int party, std::size_t problem_size, const std::vector<Integer<
 		}
 	}
 
-	// --- Step 10: emit top-K (diag, count) as 2 width-32 words each (low, high).
+	// --- Step 10: emit top-K (diag_10 as 1 word, count_64 as 2 words: low, high).
 	// Valid bit (composite[r][count_bits]) is deliberately NOT included in output. ---
-	auto push_field_64 = [&](const Integer<diag_bits>& value) {
-		for (std::size_t k = 0; k < words_per_field; k++) {
+	for (std::size_t r = 0; r < K_TOP; r++) {
+		// diag: 1 width-32 word; low diag_bits hold the value, upper bits are 0.
+		Integer<width> diag_out(0, PUBLIC);
+		for (std::size_t b = 0; b < diag_bits; b++) {
+			diag_out[b] = diags[r][b];
+		}
+		output_data.push_back(diag_out);
+
+		// count: 2 width-32 words (low then high) carved from composite's low 64 bits.
+		for (std::size_t k = 0; k < pid_words; k++) {
 			Integer<width> w(0, PUBLIC);
-			std::memcpy(w.bits.data(), &(value.bits.data()[k * width]), width * sizeof(Bit));
+			std::memcpy(w.bits.data(), &(composite[r].bits.data()[k * width]), width * sizeof(Bit));
 			output_data.push_back(w);
 		}
-	};
-	for (std::size_t r = 0; r < K_TOP; r++) {
-		push_field_64(diags[r]);
-		// Extract count from composite (low count_bits) into a fresh Integer<count_bits>.
-		Integer<count_bits> count_only(0, PUBLIC);
-		std::memcpy(count_only.bits.data(), &(composite[r].bits.data()[0]), count_bits * sizeof(Bit));
-		push_field_64(count_only);
 	}
 }
 
